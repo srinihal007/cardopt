@@ -1,23 +1,20 @@
-# CardOpt — Credit Card Rewards Portfolio Optimizer
+# CardOpt V5
 
-CardOpt is a research prototype that uses mixed-integer linear programming (MILP) to jointly:
-1. select a credit-card portfolio, and
-2. route category-level spending across the selected cards.
+CardOpt is a mixed-integer linear programming (MILP) research prototype that jointly selects a credit-card portfolio and routes category spending to maximize estimated recurring net economic value.
 
-## Run locally
+## V5 improvements
+- separates verified issuer terms from user/model assumptions
+- itemizes recurring benefit utilization instead of assuming face value
+- distinguishes first-year recurring vs ongoing annual economics
+- adds conservative/base/upside robustness testing
+- adds an assumption audit and issuer-source links
+- improves wallet, category-routing, economic-bridge, and complexity-frontier presentation
+- supports downloadable summary and allocation files
+
+## Run
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
 
-## Model design
-The objective maximizes recurring annual modeled economic value:
-
-reward value + user-valued recurring credits + applicable anniversary value - annual fees.
-
-The model includes a maximum-card constraint and piecewise handling for published bonus-category caps. It separates issuer terms from subjective assumptions such as cents-per-point and the personal value of statement credits.
-
-## Scope
-Sign-up bonuses, APR/interest, approval odds, credit-score effects, taxes, merchant coding uncertainty, and transfer-partner award availability are intentionally excluded from the recurring optimization.
-
-Card terms change. Verify the database against official issuer terms before publishing or relying on results.
+Card terms change. Re-verify issuer terms before publication or reliance. Welcome offers, APR/interest, approval odds, credit-score effects, taxes, merchant coding uncertainty, and transfer-partner award availability are outside the recurring optimization.
