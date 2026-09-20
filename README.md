@@ -1,12 +1,14 @@
-# CardOpt v1.1 + Learn
+# CardOpt Product Redesign
 
-CardOpt remains primarily an explainable MILP credit-card portfolio optimizer.
+This build keeps the audited CardOpt optimization model and recodes the visual system around the approved fintech design direction.
 
-This update adds a secondary CardOpt Learn experience:
-- Credit Card Basics
-- Rewards 101
-- Build Your Wallet learning exercise
-- clear warnings that rewards should not encourage borrowing or extra spending
-- transition from education into the real Simple/Advanced optimizer
+Fixes:
+- visible + and − controls in number inputs, including Safari/iPad fallback labels
+- removes ellipsis/truncation from trust cards, metrics, pills and select values
+- replaces the cramped Trust & Transparency metrics with responsive content cards
+- redesigns CardOpt Learn as a polished three-stage learning hub
+- richer page heroes, surfaces, tabs, controls, inputs, side panel and typography
+- responsive reflow for narrower screens instead of squeezing labels
+- preserves the academically documented MILP, issuer data, credit treatment, Simple/Advanced modes and CardOpt Compare
 
-The learning module uses general financial concepts and fictional/general wallet guidance rather than recommending specific real cards. The academically audited optimization model, Math & Model page, research methodology, card data, and consumer trust features remain intact.
+Issuer terms remain versioned and should be reverified when terms change.

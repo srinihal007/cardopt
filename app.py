@@ -159,6 +159,175 @@ div.stButton > button[kind="primary"] *{color:#fff!important}
   .topbrand{font-size:1.25rem!important}
   div.stButton>button{font-size:.78rem!important;padding-left:.35rem!important;padding-right:.35rem!important}
 }
+
+/* CARDOPT PRODUCT UI V2 - visual system */
+:root{
+ --co-navy:#071a45;--co-blue:#0b6cff;--co-indigo:#5546ee;--co-text:#102247;
+ --co-muted:#617394;--co-line:#d7e5f7;--co-panel:#ffffff;--co-soft:#f5f9ff;
+}
+html,body,[class*="css"]{font-family:Inter,ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.stApp{background:
+ radial-gradient(circle at 92% 4%,rgba(94,151,255,.13),transparent 23rem),
+ linear-gradient(180deg,#f8fbff 0%,#ffffff 45%,#f7fbff 100%)!important;color:var(--co-text)!important}
+.block-container{max-width:1240px!important;padding:1.5rem 2rem 5rem!important}
+h1,h2,h3,h4{color:var(--co-navy)!important;letter-spacing:-.035em}
+p,label,.stMarkdown,.stCaption{color:var(--co-text)}
+[data-testid="stSidebar"]{
+ background:linear-gradient(180deg,#f7faff 0%,#eef5ff 100%)!important;
+ border-right:1px solid #d9e7f7!important;min-width:310px!important
+}
+[data-testid="stSidebar"]>div:first-child{padding:1.5rem 1.35rem!important}
+[data-testid="stSidebar"] h3{font-size:1.4rem!important}
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p{line-height:1.55}
+[data-testid="stSidebar"] hr{border-color:#d9e5f4!important}
+
+/* buttons */
+div.stButton>button,div.stDownloadButton>button{
+ min-height:46px!important;height:auto!important;border-radius:12px!important;
+ padding:.7rem .85rem!important;white-space:normal!important;overflow:visible!important;
+ text-overflow:clip!important;line-height:1.2!important;font-weight:700!important;
+ background:#fff!important;color:#12336b!important;border:1px solid #cbdcf3!important;
+ box-shadow:0 4px 14px rgba(33,78,135,.06)!important
+}
+div.stButton>button *{color:inherit!important}
+div.stButton>button[kind="primary"],div.stButton>button[data-testid="stBaseButton-primary"]{
+ background:linear-gradient(100deg,#0878f9,#5b43e9)!important;color:white!important;
+ border:0!important;box-shadow:0 10px 24px rgba(43,94,224,.20)!important
+}
+div.stButton>button:hover{border-color:#7eabed!important;color:#0b55cc!important}
+div.stButton>button[kind="primary"]:hover{color:white!important;filter:brightness(1.03)}
+
+/* number inputs: restore visible +/- and prevent icon clipping */
+[data-testid="stNumberInput"]{overflow:visible!important}
+[data-testid="stNumberInput"]>div{
+ border:1px solid #bfd4ee!important;border-radius:12px!important;background:#fff!important;
+ overflow:hidden!important;min-height:48px!important
+}
+[data-testid="stNumberInput"] input{
+ color:#12284e!important;background:#fff!important;font-size:1rem!important;
+ min-width:0!important;padding:.65rem .8rem!important
+}
+[data-testid="stNumberInput"] button{
+ display:flex!important;visibility:visible!important;opacity:1!important;
+ min-width:44px!important;width:44px!important;height:46px!important;padding:0!important;
+ background:#f3f8ff!important;border-left:1px solid #d8e6f7!important;
+ color:#075dd8!important
+}
+[data-testid="stNumberInput"] button svg{
+ display:block!important;visibility:visible!important;opacity:1!important;
+ stroke:#075dd8!important;fill:none!important;width:18px!important;height:18px!important
+}
+[data-testid="stNumberInput"] button *{color:#075dd8!important}
+
+/* controls */
+[data-baseweb="select"]>div,[data-testid="stSelectbox"]>div>div,[data-testid="stMultiSelect"]>div>div{
+ background:#fff!important;color:#12284e!important;border-color:#c9d9ee!important;border-radius:12px!important;
+ min-height:48px!important
+}
+[data-testid="stSlider"] [role="slider"]{background:#1976f3!important}
+[data-testid="stRadio"] label{padding:.15rem .15rem!important}
+
+/* Never truncate metrics, pills, or select values */
+[data-testid="stMetric"]{
+ background:linear-gradient(145deg,#fff,#f8fbff)!important;border:1px solid #d9e7f7!important;
+ border-radius:18px!important;padding:1rem 1.05rem!important;min-width:0!important;
+ box-shadow:0 8px 24px rgba(37,75,120,.05)!important
+}
+[data-testid="stMetricLabel"],[data-testid="stMetricValue"]{overflow:visible!important;min-width:0!important}
+[data-testid="stMetricLabel"]>div,[data-testid="stMetricValue"]>div,
+[data-testid="stMetric"] [data-testid="stMarkdownContainer"],
+[data-testid="stMetric"] p{
+ white-space:normal!important;overflow:visible!important;text-overflow:clip!important;
+ word-break:normal!important;overflow-wrap:anywhere!important;max-width:none!important
+}
+[data-testid="stMetricValue"]{font-size:clamp(1.55rem,2.5vw,2.3rem)!important;line-height:1.1!important}
+[data-baseweb="select"] span,[data-baseweb="tag"] span{
+ max-width:none!important;white-space:normal!important;overflow:visible!important;text-overflow:clip!important
+}
+[data-baseweb="tag"]{height:auto!important;min-height:30px!important;max-width:100%!important}
+[data-testid="stExpander"]{border:1px solid #d7e5f7!important;border-radius:16px!important;background:#fff!important;overflow:hidden!important}
+[data-testid="stAlert"]{border-radius:16px!important}
+
+/* tabs */
+[data-testid="stTabs"] [role="tablist"]{
+ gap:.35rem!important;background:#f3f7fd!important;padding:.35rem!important;border-radius:14px!important;
+ border:1px solid #dfebf8!important;width:fit-content!important;max-width:100%!important
+}
+[data-testid="stTabs"] button[role="tab"]{
+ min-height:42px!important;border-radius:10px!important;padding:.55rem .9rem!important;
+ color:#445a7e!important;white-space:normal!important
+}
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"]{
+ background:#fff!important;color:#0b5dd7!important;box-shadow:0 3px 12px rgba(42,75,120,.08)!important
+}
+
+/* major surfaces */
+.hero61{
+ border:1px solid #d4e5f7!important;border-radius:28px!important;
+ background:
+ radial-gradient(circle at 82% 25%,rgba(34,123,255,.22),transparent 25%),
+ linear-gradient(125deg,#ffffff 0%,#eef7ff 58%,#e5f0ff 100%)!important;
+ box-shadow:0 18px 48px rgba(35,78,130,.09)!important
+}
+.pagehero{
+ padding:2.25rem 2.35rem!important;border:1px solid #d6e5f7!important;border-radius:24px!important;
+ background:radial-gradient(circle at 88% 20%,rgba(78,140,255,.17),transparent 28%),
+ linear-gradient(135deg,#fff,#eef6ff)!important;box-shadow:0 14px 38px rgba(34,75,125,.07)!important;
+ margin-bottom:1.2rem!important
+}
+.pagehero h1{font-size:clamp(2.15rem,4vw,3.4rem)!important;margin:.35rem 0 .6rem!important}
+.pagehero p{font-size:1.05rem!important;color:#536989!important;max-width:780px!important}
+.infoCard,.research-card,.modecard,.callout,.premium-pill{
+ border-color:#d7e5f7!important;box-shadow:0 10px 30px rgba(35,76,126,.055)!important
+}
+.research-card,.infoCard{background:linear-gradient(145deg,#fff,#f9fcff)!important;border-radius:20px!important}
+.modecard{border-radius:24px!important;min-height:300px!important}
+.premium-strip{gap:1rem!important}
+.premium-pill{
+ background:linear-gradient(145deg,#fff,#f5f9ff)!important;border-radius:18px!important;
+ min-width:0!important;overflow:visible!important
+}
+.premium-pill b,.premium-pill span{white-space:normal!important;overflow:visible!important;text-overflow:clip!important}
+.note{border:1px solid #d7e5f7!important;background:#f7fbff!important;border-radius:15px!important;padding:1rem 1.1rem!important}
+
+/* Learn becomes a designed learning hub */
+.learn-hero{
+ padding:2.4rem;border:1px solid #d3e5fa;border-radius:26px;margin-bottom:1.1rem;
+ background:radial-gradient(circle at 88% 30%,rgba(87,73,238,.16),transparent 28%),
+ linear-gradient(125deg,#ffffff,#eef7ff);box-shadow:0 16px 42px rgba(32,77,132,.08)
+}
+.learn-hero h1{font-size:clamp(2.2rem,4vw,3.35rem);margin:.35rem 0 .55rem}
+.learn-hero p{max-width:760px;color:#5c6f8e;font-size:1.05rem;line-height:1.65}
+.learn-path{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:1rem 0 1.35rem}
+.learn-step{padding:1.15rem;border:1px solid #d8e6f7;border-radius:18px;background:#fff}
+.learn-step .num{display:inline-flex;width:34px;height:34px;border-radius:50%;align-items:center;justify-content:center;
+ background:#eaf3ff;color:#0b67e8;font-weight:800;margin-bottom:.65rem}
+.learn-step b{display:block;color:#102651;font-size:1.02rem;margin-bottom:.25rem}
+.learn-step span{display:block;color:#687b99;line-height:1.45}
+.lesson-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:.7rem 0 1rem}
+.lesson{padding:1.2rem 1.25rem;border:1px solid #d9e7f7;border-radius:18px;background:linear-gradient(145deg,#fff,#f8fbff)}
+.lesson .lesson-icon{font-size:1.25rem;margin-bottom:.45rem}
+.lesson h3{font-size:1.05rem!important;margin:.15rem 0 .35rem!important}
+.lesson p{font-size:.94rem;line-height:1.55;color:#607391!important;margin:0!important}
+.learn-example{padding:1.2rem 1.3rem;border-radius:18px;border:1px solid #cfe1f7;background:linear-gradient(120deg,#eef7ff,#f7f4ff);margin:1rem 0}
+
+/* responsive: eliminate ellipsis by reflowing rather than squeezing */
+@media(max-width:1050px){
+ .block-container{padding-left:1.2rem!important;padding-right:1.2rem!important}
+ [data-testid="stMetricValue"]{font-size:1.55rem!important}
+}
+@media(max-width:800px){
+ [data-testid="stSidebar"]{min-width:280px!important}
+ .learn-path,.lesson-grid{grid-template-columns:1fr!important}
+ .premium-strip{display:grid!important;grid-template-columns:1fr!important}
+ .hero61{padding:2rem 1.4rem!important}
+ .pagehero,.learn-hero{padding:1.6rem!important}
+ [data-testid="stMetric"]{padding:.85rem!important}
+}
+
+[data-testid="stNumberInput"] button{font-size:0!important;position:relative!important}
+[data-testid="stNumberInput"] button:first-of-type:after{content:"−";font-size:22px!important;font-weight:600;color:#075dd8}
+[data-testid="stNumberInput"] button:last-of-type:after{content:"+";font-size:22px!important;font-weight:600;color:#075dd8}
 </style>
 """, unsafe_allow_html=True)
 
@@ -404,61 +573,69 @@ if st.session_state.experience is None:
         st.stop()
 
     if st.session_state.page == "Learn":
-        st.markdown('<div class="pagehero"><div class="eyebrow">CardOpt Learn</div><h1>Understand the money before optimizing it.</h1><p>A practical introduction to credit cards, rewards and wallet decisions for anyone who wants the concepts without the jargon.</p></div>',unsafe_allow_html=True)
+        st.markdown("""<div class="learn-hero">
+        <div class="eyebrow">CARDOPT LEARN</div>
+        <h1>Build confidence with credit.</h1>
+        <p>Understand how credit cards, rewards and wallet decisions work before you optimize. Learn the concepts in plain English, then practice building a wallet that matches your priorities.</p>
+        </div>""",unsafe_allow_html=True)
 
-        st.markdown("""<div class="premium-strip">
-        <div class="premium-pill"><b>Start with the basics</b><span>Learn statements, APR, utilization and why paying in full matters.</span></div>
-        <div class="premium-pill"><b>Understand rewards</b><span>Separate multipliers, cash back, points, credits and annual fees.</span></div>
-        <div class="premium-pill"><b>Build your wallet</b><span>Practice choosing a simple card setup before using the optimizer.</span></div>
+        st.markdown("""<div class="learn-path">
+          <div class="learn-step"><div class="num">1</div><b>Credit foundations</b><span>Statements, APR, utilization and responsible card use.</span></div>
+          <div class="learn-step"><div class="num">2</div><b>Rewards economics</b><span>Cash back, points, annual fees, caps and credits.</span></div>
+          <div class="learn-step"><div class="num">3</div><b>Build your wallet</b><span>Turn what you learned into a simple wallet strategy.</span></div>
         </div>""",unsafe_allow_html=True)
 
         basics,rewards,wallet=st.tabs(["Credit Card Basics","Rewards 101","Build Your Wallet"])
 
         with basics:
-            st.markdown("### The rule that comes before rewards")
-            st.info("Rewards are valuable only when they are not outweighed by interest or unnecessary spending. CardOpt's optimizer models rewards and recurring card economics, not borrowing costs.")
-            c1,c2=st.columns(2)
-            with c1:
-                st.markdown("""<div class="research-card"><h3>Statement balance</h3><p>The amount shown on your statement for that billing cycle. Paying the statement balance in full by the due date is the key behavior for avoiding purchase interest when a grace period applies.</p></div>""",unsafe_allow_html=True)
-                st.markdown("""<div class="research-card"><h3>APR</h3><p>Annual Percentage Rate is the annualized rate used to express borrowing cost. A rewards card can become expensive quickly if purchases accrue interest.</p></div>""",unsafe_allow_html=True)
-            with c2:
-                st.markdown("""<div class="research-card"><h3>Credit utilization</h3><p>The share of available revolving credit currently being used. It is different from a spending budget and can affect credit scoring.</p></div>""",unsafe_allow_html=True)
-                st.markdown("""<div class="research-card"><h3>Annual fee</h3><p>A yearly card cost. A fee is not automatically good or bad. The useful question is whether the value you realistically receive exceeds the cost for your spending and habits.</p></div>""",unsafe_allow_html=True)
-            st.warning("CardOpt is not telling users to open more accounts or spend more. It optimizes a modeled wallet under the spending and constraints the user supplies.")
+            st.markdown("## Start with the fundamentals")
+            st.write("Rewards come after responsible card use. These four ideas matter before any points calculation.")
+            st.markdown("""<div class="lesson-grid">
+              <div class="lesson"><div class="lesson-icon">▣</div><h3>Statement balance</h3><p>The amount shown on your statement for the billing cycle. Paying the statement balance in full by the due date is central to avoiding purchase interest when a grace period applies.</p></div>
+              <div class="lesson"><div class="lesson-icon">%</div><h3>APR</h3><p>Annual Percentage Rate expresses borrowing cost on an annualized basis. Interest can quickly outweigh the value of credit-card rewards.</p></div>
+              <div class="lesson"><div class="lesson-icon">◔</div><h3>Credit utilization</h3><p>The share of available revolving credit currently being used. It is different from a spending budget and can affect credit scoring.</p></div>
+              <div class="lesson"><div class="lesson-icon">$</div><h3>Annual fee</h3><p>A yearly cost for holding a card. The useful question is whether the value you realistically receive justifies that cost for your own habits.</p></div>
+            </div>""",unsafe_allow_html=True)
+            st.info("CardOpt does not encourage opening more accounts or spending more. The optimizer works with the spending and constraints you provide.")
 
         with rewards:
-            st.markdown("### How rewards actually work")
-            r1,r2=st.columns(2)
-            with r1:
-                st.markdown("""<div class="research-card"><h3>Cash back</h3><p>A 2% cash-back rate means $2 of rewards for each $100 of eligible purchases, subject to the issuer's terms.</p></div>""",unsafe_allow_html=True)
-                st.markdown("""<div class="research-card"><h3>Points and miles</h3><p>A 4X card earns four points per eligible dollar, but 4X is not the same as 4% unless each point is worth exactly one cent for the redemption being modeled.</p></div>""",unsafe_allow_html=True)
-                st.markdown("""<div class="research-card"><h3>Reward caps</h3><p>Some bonus categories stop earning the elevated rate after a spending threshold. CardOpt explicitly models caps for the capped categories in its research set.</p></div>""",unsafe_allow_html=True)
-            with r2:
-                st.markdown("""<div class="research-card"><h3>Credits and benefits</h3><p>A $100 credit is not necessarily worth $100 to every person. Restricted lifestyle benefits start at $0 in CardOpt so users value only what they realistically expect to use.</p></div>""",unsafe_allow_html=True)
-                st.markdown("""<div class="research-card"><h3>Point valuation</h3><p>The cash value of transferable points depends on redemption. CardOpt therefore labels cents-per-point values as model assumptions rather than issuer facts.</p></div>""",unsafe_allow_html=True)
-                st.markdown("""<div class="research-card"><h3>Net annual value</h3><p>CardOpt compares estimated reward value, modeled benefits and applicable anniversary value against annual fees. That portfolio economics view is more informative than comparing headline multipliers alone.</p></div>""",unsafe_allow_html=True)
-            st.markdown("#### Quick example")
-            st.write("If you spend **$10,000 on dining**, a hypothetical 4X card with points modeled at 1.5 cents each produces **$600** of modeled reward value. With a **$325 annual fee** and no other valued benefits, that is **$275** before considering anything else. A no-fee 3% card would produce **$300**. A bigger multiplier does not automatically mean a better card.")
+            st.markdown("## Learn the economics behind rewards")
+            st.write("Headline multipliers are only one part of a card's value.")
+            st.markdown("""<div class="lesson-grid">
+              <div class="lesson"><div class="lesson-icon">$</div><h3>Cash back</h3><p>A 2% cash-back rate means $2 of rewards for each $100 of eligible purchases, subject to issuer terms.</p></div>
+              <div class="lesson"><div class="lesson-icon">×</div><h3>Points and miles</h3><p>A 4X card earns four points per eligible dollar. It is not automatically 4% back because the dollar value of a point depends on redemption.</p></div>
+              <div class="lesson"><div class="lesson-icon">⌁</div><h3>Reward caps</h3><p>Some bonus categories stop earning the elevated rate after a threshold. CardOpt explicitly models relevant caps in its research set.</p></div>
+              <div class="lesson"><div class="lesson-icon">◎</div><h3>Credits and benefits</h3><p>A $100 restricted credit is not necessarily worth $100 to you. CardOpt separates issuer face value from the value you realistically expect to use.</p></div>
+              <div class="lesson"><div class="lesson-icon">◇</div><h3>Point valuation</h3><p>Transferable points do not have one guaranteed cash value. CardOpt exposes cents-per-point as a model assumption instead of presenting it as an issuer fact.</p></div>
+              <div class="lesson"><div class="lesson-icon">Σ</div><h3>Net annual value</h3><p>CardOpt combines modeled reward value, benefits and applicable anniversary value, then subtracts annual fees to estimate recurring portfolio economics.</p></div>
+            </div>""",unsafe_allow_html=True)
+            st.markdown("""<div class="learn-example"><b>Why 4X is not automatically better than 3%</b><br><br>
+            On $10,000 of dining, 4X points valued at 1.5 cents each produces $600 of modeled reward value. Subtract a $325 annual fee and the result is $275 before other benefits. A no-fee 3% card produces $300. CardOpt evaluates the economics, not just the biggest multiplier.</div>""",unsafe_allow_html=True)
 
         with wallet:
-            st.markdown("### Build Your Wallet")
-            st.write("This is a learning exercise, not another optimizer. Pick the statements that sound most like you and CardOpt will explain what kind of wallet structure is worth exploring.")
-            annual_fee=st.radio("How do you feel about annual fees?",["I want to avoid them while learning","I am open to one if the math supports it"],horizontal=True,key="learn_fee")
-            simplicity=st.radio("How much complexity do you want?",["Keep it simple","I am comfortable using different cards by category"],horizontal=True,key="learn_complex")
-            travel=st.radio("Do travel rewards matter to you?",["Not really","Sometimes","Yes, a lot"],horizontal=True,key="learn_travel")
-            payoff=st.radio("Which statement best describes your plan?",["Pay the statement balance in full","I may carry a balance"],horizontal=True,key="learn_payoff")
+            st.markdown("## Build Your Wallet")
+            st.write("Use this guided exercise to understand what kind of wallet structure is worth exploring. It teaches the decision logic; the actual CardOpt optimizer does the math.")
+            q1,q2=st.columns(2)
+            with q1:
+                annual_fee=st.radio("Annual-fee preference",["Avoid annual fees while learning","Open to a fee when the math supports it"],key="learn_fee")
+                travel=st.radio("How important are travel rewards?",["Not important","Somewhat important","Very important"],key="learn_travel")
+            with q2:
+                simplicity=st.radio("Wallet complexity",["Keep it simple","Comfortable using cards by category"],key="learn_complex")
+                payoff=st.radio("Balance plan",["Pay the statement balance in full","I may carry a balance"],key="learn_payoff")
 
+            st.markdown("### Your learning takeaway")
             if payoff=="I may carry a balance":
-                st.error("Focus on borrowing cost before optimizing rewards. Interest can outweigh rewards quickly. CardOpt's rewards optimizer intentionally does not model APR or recommend borrowing.")
-            elif annual_fee=="I want to avoid them while learning" and simplicity=="Keep it simple":
-                st.success("A simple no-annual-fee, flat-rate structure is a useful starting point to understand. You can then compare whether category bonuses would add enough value to justify more complexity.")
-            elif travel=="Yes, a lot" and annual_fee=="I am open to one if the math supports it":
-                st.success("You may benefit from comparing travel-oriented cards, but evaluate the annual fee, realistic credit usage, redemption value and booking restrictions together. Headline multipliers alone are not enough.")
+                st.error("Prioritize borrowing cost before rewards. Interest can outweigh rewards quickly. CardOpt's optimization intentionally does not model or recommend carrying debt.")
+            elif annual_fee=="Avoid annual fees while learning" and simplicity=="Keep it simple":
+                st.success("Start by understanding a simple no-annual-fee, flat-rate structure. Then compare whether category bonuses create enough additional value to justify more complexity.")
+            elif travel=="Very important" and annual_fee=="Open to a fee when the math supports it":
+                st.success("Explore travel-oriented cards, but evaluate annual fees, realistic credit usage, redemption value and booking restrictions together. A headline multiplier alone is not enough.")
             else:
-                st.success("A small portfolio may be worth comparing: a strong everyday card plus a category card can capture more value without making the wallet unnecessarily complicated.")
+                st.success("A small portfolio may be worth exploring: a strong everyday card plus a complementary category card can add value without making the wallet unnecessarily complex.")
 
-            st.markdown("""<div class="callout"><strong>Ready for the real model?</strong><br>Build Your Wallet teaches the decision logic. Simple Mode and Advanced Mode use the actual CardOpt optimization engine to evaluate the modeled cards and your spending.</div>""",unsafe_allow_html=True)
-            if st.button("Use CardOpt optimizer",type="primary",key="learn_to_home"):
+            st.markdown("""<div class="learn-example"><b>Learning mode → optimization mode</b><br>
+            Build Your Wallet gives you the framework. Simple Mode and Advanced Mode use CardOpt's mixed-integer optimization model to evaluate your actual modeled spending scenario.</div>""",unsafe_allow_html=True)
+            if st.button("Use the CardOpt optimizer",type="primary",use_container_width=True,key="learn_to_home"):
                 st.session_state.page="Home"; st.rerun()
         st.stop()
 
@@ -578,7 +755,7 @@ with tabs[0]:
     spend={}; cols=st.columns(2)
     for i,(k,label) in enumerate(CATS.items()):
         with cols[i%2]: spend[k]=st.number_input(label,0.0,value=float(DEFAULT[k]),step=500.0,format="%.0f",key="s"+k)
-    st.metric("Total annual card spending",money(sum(spend.values())))
+    st.markdown(f"""<div class="learn-example" style="margin-top:1rem"><span style="color:#647696;font-size:.9rem">TOTAL ANNUAL CARD SPENDING</span><br><strong style="font-size:2.25rem;color:#0b55d9">{money(sum(spend.values()))}</strong></div>""",unsafe_allow_html=True)
 
 bens={}
 with tabs[1]:
@@ -652,11 +829,12 @@ if reward_choice=="Keep rewards simple":
             effective_cpp[n]=1.0
 
 st.markdown("### Trust & transparency")
-tr1,tr2,tr3,tr4=st.columns(4)
-tr1.metric("Official issuer sources","6 / 6")
-tr2.metric("Restricted benefits","$0 default")
-tr3.metric("Comparison baseline",f"{benchmark*100:.0f}% cash back")
-tr4.metric("Terms reviewed",VERIFIED)
+st.markdown(f"""<div class="premium-strip">
+<div class="premium-pill"><b>6 / 6 official sources</b><span>Every modeled card links to an official issuer source.</span></div>
+<div class="premium-pill"><b>$0 default benefit value</b><span>Restricted lifestyle benefits are valued only when you say you use them.</span></div>
+<div class="premium-pill"><b>{benchmark*100:.0f}% cash-back baseline</b><span>The comparison benchmark stays visible and editable.</span></div>
+<div class="premium-pill"><b>Reviewed {VERIFIED}</b><span>Issuer terms can change, so CardOpt shows its verification date.</span></div>
+</div>""",unsafe_allow_html=True)
 with st.expander("How CardOpt earns your trust"):
     st.write("• Card terms link to official issuer sources.")
     st.write("• Restricted credits start at $0 unless you say you would naturally use them.")
