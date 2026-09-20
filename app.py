@@ -59,6 +59,29 @@ div.stButton > button{border-radius:12px;font-weight:700;min-height:46px}
 .creditcard .issuer{font-size:.73rem;opacity:.75;text-transform:uppercase;letter-spacing:.1em}.creditcard .cardname{font-size:1.15rem;font-weight:780;margin-top:.35rem}.creditcard .chip{width:35px;height:26px;border-radius:6px;background:linear-gradient(135deg,#d9bf72,#f6e8ae);margin-top:2rem}.creditcard .fee{position:absolute;bottom:1rem;left:1.25rem;font-size:.78rem;opacity:.78}
 .chase{background:linear-gradient(135deg,#071c43,#1765a8)}.amex{background:linear-gradient(135deg,#a27a2f,#ead28d);color:#17203a}.capone{background:linear-gradient(135deg,#263c5b,#0b1b32)}.citi{background:linear-gradient(135deg,#163c78,#2875bb)}.freedom{background:linear-gradient(135deg,#235f9f,#61a3d8)}.wells{background:linear-gradient(135deg,#76192b,#b2263e)}
 @media(max-width:850px){.hero61{padding:2rem 1.4rem}.hero61 h1{font-size:2.65rem}.orbit{display:none}.brand{margin-bottom:2rem}}
+
+/* V6.4 HIGH CONTRAST + PREMIUM POLISH */
+:root{--ink:#0b1736;--text:#34425e;--muted:#65728a;--blue:#1769e0;--line:#dce7f5}
+html,body,[data-testid="stAppViewContainer"],.stApp{background:#fff!important;color:var(--text)!important}
+.main .block-container{max-width:1180px;padding-top:1.15rem;padding-bottom:4rem}
+h1,h2,h3,h4,h5,h6,[data-testid="stMarkdownContainer"] h1,[data-testid="stMarkdownContainer"] h2,[data-testid="stMarkdownContainer"] h3{color:var(--ink)!important}
+p,li,label,.stMarkdown,[data-testid="stMarkdownContainer"],[data-testid="stCaptionContainer"],[data-testid="stWidgetLabel"],.stRadio label,.stCheckbox label{color:var(--text)!important}
+small,.stCaption,[data-testid="stCaptionContainer"]{color:var(--muted)!important} a{color:#0d63d8!important}
+[data-testid="stMetric"]{background:#fff;border:1px solid var(--line);border-radius:16px;padding:15px 16px;box-shadow:0 8px 24px rgba(30,70,120,.05)}
+[data-testid="stMetricLabel"] p{color:#63718a!important}[data-testid="stMetricValue"]{color:var(--ink)!important}
+[data-testid="stExpander"]{background:#fff;border:1px solid var(--line)!important;border-radius:16px!important}[data-testid="stExpander"] summary *{color:var(--ink)!important}
+[data-testid="stTabs"] button p{color:#46536b!important}[data-testid="stTabs"] button[aria-selected="true"] p{color:#0d63d8!important;font-weight:750}
+[data-baseweb="select"] *,.stTextInput input,.stNumberInput input{color:#17233f!important}.stTextInput input,.stNumberInput input{background:#fff!important}
+.stAlert *{color:#25324c!important}[data-testid="stSidebar"]{background:#f6f9fe!important}[data-testid="stSidebar"] *{color:#263550!important}
+.eyebrow{color:#235ea9!important}.pagehero p,.infoCard p,.mode p,.hero p{color:#56657f!important}
+.infoCard,.mode,.callout,.section61{color:var(--text)!important}.infoCard h3,.mode h3,.section61 h1,.section61 h2,.section61 h3{color:var(--ink)!important}
+.hero{background:radial-gradient(circle at 82% 18%,rgba(102,179,255,.28),transparent 29%),linear-gradient(118deg,#fbfdff 0%,#edf7ff 58%,#d8ecff 100%)!important;border:1px solid #d8e7f7!important;box-shadow:0 22px 60px rgba(35,90,155,.10)!important}
+.hero h1{color:#091633!important}.hero .blue{color:#1769e0!important}.mode{box-shadow:0 14px 38px rgba(34,74,125,.07)!important;transition:.18s ease}.mode:hover{transform:translateY(-3px);box-shadow:0 20px 44px rgba(34,74,125,.12)!important}
+.premium-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:14px 0 28px}.premium-pill{background:linear-gradient(180deg,#fff,#f7faff);border:1px solid #dfe9f6;border-radius:16px;padding:16px}.premium-pill b{display:block;color:#0b1736;font-size:1rem;margin-bottom:4px}.premium-pill span{color:#64718a;font-size:.86rem}
+.research-card{background:linear-gradient(145deg,#fff,#f8fbff);border:1px solid #dce7f5;border-radius:18px;padding:20px;margin:10px 0;box-shadow:0 9px 25px rgba(40,75,120,.04)}.research-card h3{margin-top:0;color:#0b1736!important}.research-card p{color:#52617b!important}
+.creditcard{height:196px!important;border-radius:20px!important;padding:1.35rem!important;border:1px solid rgba(255,255,255,.28)!important;box-shadow:0 20px 42px rgba(12,32,68,.22)!important;isolation:isolate}.creditcard:before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.18),transparent 34%,rgba(255,255,255,.04) 55%,transparent);z-index:-1}.creditcard .issuer{font-size:.7rem!important;font-weight:700;letter-spacing:.14em!important}.creditcard .cardname{font-size:1.18rem!important}.creditcard .chip{width:40px!important;height:29px!important;border:1px solid rgba(110,80,20,.25)}.creditcard .fee{font-weight:600}
+.chase{background:linear-gradient(135deg,#06152f,#0b3c70 55%,#1479bb)!important}.amex{background:linear-gradient(135deg,#9a752e,#e2c776 48%,#f4e4aa)!important;color:#17203a!important}.capone{background:linear-gradient(145deg,#0b1729,#173658 62%,#274e74)!important}.citi{background:linear-gradient(145deg,#12366f,#2d7cc0)!important}.freedom{background:linear-gradient(145deg,#184b83,#62a8dc)!important}.wells{background:linear-gradient(145deg,#651426,#b62b46)!important}
+@media(max-width:850px){.premium-strip{grid-template-columns:1fr}.main .block-container{padding-left:1rem;padding-right:1rem}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -205,13 +228,14 @@ if st.session_state.experience is None:
         for col,item in zip([aa,bb,cc],steps):
             with col:
                 st.markdown('<div class="infoCard"><div class="eyebrow">'+item[0]+'</div><h3>'+item[1]+'</h3><p>'+item[2]+'</p></div>',unsafe_allow_html=True)
-        st.markdown("### What makes this different")
-        st.write("CardOpt compares portfolio economics rather than ranking cards one at a time. Fees, reward rates, caps, point values, benefits and wallet size can all change the optimal result.")
+        st.markdown("""<div class="research-card"><div class="eyebrow">WHY CARDOPT</div><h3>What makes this different</h3><p>Most card comparisons rank one card at a time. CardOpt looks at the wallet as a system. Fees, reward rates, spending caps, point values, benefits and wallet size interact, so changing one assumption can change the best overall portfolio.</p></div>""",unsafe_allow_html=True)
+        st.markdown("""<div class="premium-strip"><div class="premium-pill"><b>Portfolio first</b><span>Optimizes the combination, not a single-card ranking.</span></div><div class="premium-pill"><b>Your constraints</b><span>Respects wallet size, fees, caps and booking preferences.</span></div><div class="premium-pill"><b>Explainable results</b><span>See assumptions, allocation and why cards were selected.</span></div></div>""",unsafe_allow_html=True)
         if st.button("Choose an experience",type="primary"): st.session_state.page="Home"; st.rerun()
         st.stop()
 
     if st.session_state.page == "Cards":
-        st.markdown('<div class="pagehero"><div class="eyebrow">Card library</div><h1>The cards currently modeled.</h1><p>A deliberately focused research set with transparent terms.</p></div>',unsafe_allow_html=True)
+        st.markdown('<div class="pagehero"><div class="eyebrow">Card library</div><h1>The cards currently modeled.</h1><p>A deliberately focused research set with transparent terms.</p></div>',unsafe_allow_html=True) 
+        st.markdown("""<div class="premium-strip"><div class="premium-pill"><b>6 researched cards</b><span>Focused set with transparent modeled terms.</span></div><div class="premium-pill"><b>Official sources</b><span>Issuer links are available inside each card.</span></div><div class="premium-pill"><b>Last reviewed</b><span>September 20, 2026.</span></div></div>""",unsafe_allow_html=True)
         styles={"Chase Sapphire Reserve":"chase","American Express Gold":"amex","Capital One Venture X":"capone","Citi Double Cash":"citi","Chase Freedom Unlimited":"freedom","Wells Fargo Active Cash":"wells"}
         issuers={"Chase Sapphire Reserve":"Chase","American Express Gold":"American Express","Capital One Venture X":"Capital One","Citi Double Cash":"Citi","Chase Freedom Unlimited":"Chase","Wells Fargo Active Cash":"Wells Fargo"}
         cardcols=st.columns(3)
@@ -232,27 +256,23 @@ if st.session_state.experience is None:
 
     if st.session_state.page == "Research":
         st.markdown('<div class="pagehero"><div class="eyebrow">Research</div><h1>Transparent by design.</h1><p>The optimization is useful only if its assumptions, constraints and data can be inspected.</p></div>',unsafe_allow_html=True)
-        st.markdown("### Optimization model")
-        st.write("CardOpt uses mixed-integer linear programming. Binary variables represent whether a card is selected. Continuous variables represent category-level spend allocated to each card.")
+        st.markdown("""<div class="research-card"><h3>Optimization model</h3><p>CardOpt uses mixed-integer linear programming. Binary variables represent whether a card is selected. Continuous variables represent category-level spending allocated to each card.</p></div>""",unsafe_allow_html=True)
         st.latex(r"\max\; \text{reward value} + \text{user-valued benefits} + \text{anniversary value} - \text{annual fees}")
-        st.markdown("### Constraints")
-        st.write("Every dollar is allocated, spending flows only to selected cards, modeled reward caps are enforced, and the portfolio respects the user's wallet-size limit.")
-        st.markdown("### Validation")
-        st.write("Known-answer tests cover cash-back arithmetic, annual-fee tradeoffs, multi-card routing, reward caps and overflow, benefit valuation, and first-year versus ongoing anniversary treatment.")
-        st.markdown("### Assumption taxonomy")
-        st.write("Issuer facts come from card terms. User inputs include spending and benefit values. Model assumptions include point valuations. Calculated results include the optimized wallet and estimated net value.")
-        st.markdown("### Deliberate exclusions")
-        st.write("Welcome offers, APR and interest, approval odds, credit-score effects, taxes, merchant-coding uncertainty, transfer award availability and unpriced qualitative perks are outside the recurring model.")
+        r1,r2=st.columns(2)
+        with r1:
+            st.markdown("""<div class="research-card"><h3>Constraints</h3><p>Every modeled dollar is allocated. Spending flows only to selected cards. Reward caps are enforced. The portfolio respects the user's maximum wallet size.</p></div>""",unsafe_allow_html=True)
+            st.markdown("""<div class="research-card"><h3>Assumption taxonomy</h3><p><b>Issuer Fact:</b> card terms and fees.<br><b>User Input:</b> spending and benefit values.<br><b>Model Assumption:</b> point valuations.<br><b>Calculated Result:</b> optimized wallet and estimated net value.</p></div>""",unsafe_allow_html=True)
+        with r2:
+            st.markdown("""<div class="research-card"><h3>Validation</h3><p>Known-answer tests cover cash-back arithmetic, annual-fee tradeoffs, multi-card routing, reward caps and overflow, benefit valuation, and first-year versus ongoing anniversary treatment.</p></div>""",unsafe_allow_html=True)
+            st.markdown("""<div class="research-card"><h3>Deliberate exclusions</h3><p>Welcome offers, APR and interest, approval odds, credit-score effects, taxes, merchant-coding uncertainty, transfer award availability and unpriced qualitative perks are outside the recurring model.</p></div>""",unsafe_allow_html=True)
         st.stop()
 
     if st.session_state.page == "About":
         st.markdown('<div class="pagehero"><div class="eyebrow">About CardOpt</div><h1>What should actually be in your wallet?</h1><p>CardOpt is an independent quantitative finance and optimization project built to explore that question.</p></div>',unsafe_allow_html=True)
         a1,a2=st.columns([1.25,1])
         with a1:
-            st.markdown("### Why CardOpt exists")
-            st.write("Comparing individual cards is relatively easy. Comparing a portfolio is harder because rewards, annual fees, spending caps, point values, benefits and overlapping categories interact. CardOpt models those interactions together.")
-            st.markdown("### Built by Sri Nihal Tammana")
-            st.write("CardOpt explores how mathematical optimization can make an everyday financial decision more transparent and easier to understand.")
+            st.markdown("""<div class="research-card"><h3>Why CardOpt exists</h3><p>Comparing individual cards is relatively easy. Comparing a portfolio is harder because rewards, annual fees, spending caps, point values, benefits and overlapping categories interact. CardOpt models those interactions together.</p></div>""",unsafe_allow_html=True)
+            st.markdown("""<div class="research-card"><h3>Built by Sri Nihal Tammana</h3><p>CardOpt is an independent quantitative finance and optimization project exploring how mathematical modeling can make an everyday financial decision more transparent and easier to understand.</p></div>""",unsafe_allow_html=True)
         with a2:
             st.markdown('<div class="infoCard"><div class="eyebrow">Principles</div><h3>Useful, inspectable, honest.</h3><p>Keep the consumer experience simple. Expose the model for people who want depth. Separate issuer facts from assumptions. Validate the math with known-answer tests. Never treat restricted benefits as automatic cash value.</p></div>',unsafe_allow_html=True)
         st.info("CardOpt is an educational and research prototype, not individualized financial advice.")
