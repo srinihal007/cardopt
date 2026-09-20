@@ -1,14 +1,15 @@
-# CardOpt Product Redesign
+# CardOpt Ultimate Final
 
-This build keeps the audited CardOpt optimization model and recodes the visual system around the approved fintech design direction.
+This build consolidates the visual layer into one design system and fixes dark-mode/iPad component conflicts.
 
-Fixes:
-- visible + and − controls in number inputs, including Safari/iPad fallback labels
-- removes ellipsis/truncation from trust cards, metrics, pills and select values
-- replaces the cramped Trust & Transparency metrics with responsive content cards
-- redesigns CardOpt Learn as a polished three-stage learning hub
-- richer page heroes, surfaces, tabs, controls, inputs, side panel and typography
-- responsive reflow for narrower screens instead of squeezing labels
-- preserves the academically documented MILP, issuer data, credit treatment, Simple/Advanced modes and CardOpt Compare
+Key UI fixes:
+- forces Streamlit's component theme to light so white controls never inherit white text
+- closed select and multiselect values are explicitly dark and readable
+- dropdown popovers are light with dark text
+- number-input steppers use one Safari-safe minus and plus, with original SVGs hidden to prevent duplicates
+- no ellipsis on metrics, pills, tags, buttons or selected values
+- analysis, preferences, trust and optimize areas are structured as premium product panels
+- CardOpt Learn retains its richer learning-hub design
+- one consolidated CSS system replaces the accumulated conflicting overrides
 
-Issuer terms remain versioned and should be reverified when terms change.
+The underlying CardOpt optimization model and audited card data are unchanged from the academically corrected build.
