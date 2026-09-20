@@ -136,6 +136,29 @@ div.stButton > button[kind="primary"] *{color:#fff!important}
  .heroArt{position:relative!important;right:auto!important;top:auto!important;width:100%!important;height:250px!important;margin-top:18px!important}
  .heroCard{max-width:220px!important}
 }
+
+/* FINAL ACADEMIC PRODUCT PASS */
+.topbrand{padding-top:.38rem!important}
+.modecard{min-height:285px!important;overflow:hidden!important;position:relative!important}
+.modecard p,.modecard .ticks,.modecard .tag{position:relative!important;z-index:2!important}
+.infoCard{min-height:205px!important}
+[data-testid="stHorizontalBlock"]{align-items:stretch}
+.creditcard{overflow:hidden!important;position:relative!important}
+.creditcard:after{content:"";position:absolute;width:150px;height:150px;border-radius:50%;right:-55px;bottom:-70px;background:rgba(255,255,255,.08)}
+.research-card{line-height:1.65}
+@media(max-width:760px){
+ .hero61{padding:2rem 1.35rem!important;border-radius:22px!important}
+ .hero61 h1{font-size:2.55rem!important}
+ .orbit{position:relative!important;right:auto!important;top:auto!important;margin:2rem auto 0!important;transform:scale(.9)}
+ .modecard{min-height:auto!important}
+}
+
+/* LEARN MODULE */
+[data-testid="stTabs"] [role="tablist"]{flex-wrap:wrap!important}
+@media(max-width:1000px){
+  .topbrand{font-size:1.25rem!important}
+  div.stButton>button{font-size:.78rem!important;padding-left:.35rem!important;padding-right:.35rem!important}
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -150,7 +173,8 @@ DB={
 "Chase Sapphire Reserve":{"fee":795,"cpp":1.50,
 "rates":{"dining":3,"us_supermarkets":1,"airfare_direct":4,"hotels_direct":4,"portal_flights":8,"portal_hotels":8,"drugstores":1,"other":1},
 "caps":{},"ann":0,
-"benefits":[("Annual travel credit",300,"Eligible travel purchases; credited purchases do not earn points.")],
+"auto_credit":{"name":"Annual travel credit","cap":300,"eligible":["airfare_direct","hotels_direct","portal_flights","portal_hotels"],"note":"Modeled only against eligible travel categories in CardOpt; credited spend earns no points."},
+"benefits":[],
 "source":"https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve"},
 "American Express Gold":{"fee":325,"cpp":1.50,
 "rates":{"dining":4,"us_supermarkets":4,"airfare_direct":3,"hotels_direct":1,"portal_flights":3,"portal_hotels":5,"drugstores":1,"other":1},
@@ -159,83 +183,140 @@ DB={
 ("Uber Cash",120,"U.S. Uber/Uber Eats; monthly limits and terms apply."),
 ("Resy credit",100,"Eligible U.S. Resy purchases; semiannual limits and terms apply."),
 ("Dunkin' credit",84,"Eligible U.S. Dunkin' purchases; monthly limits and enrollment/terms apply.")],
-"source":"https://www.americanexpress.com/us/credit-cards/card/gold-card/"},
+"auto_credit":None,"source":"https://www.americanexpress.com/us/credit-cards/card/gold-card/"},
 "Capital One Venture X":{"fee":395,"cpp":1.50,
 "rates":{"dining":2,"us_supermarkets":2,"airfare_direct":2,"hotels_direct":2,"portal_flights":5,"portal_hotels":10,"drugstores":2,"other":2},
 "caps":{},"ann":10000,
-"benefits":[("Capital One Travel credit",300,"Annual credit for eligible Capital One Travel purchases; rewards are not earned on the credit amount.")],
+"auto_credit":{"name":"Capital One Travel credit","cap":300,"eligible":["portal_flights","portal_hotels"],"note":"Applied only to modeled Capital One Travel spend; credited spend earns no miles."},
+"benefits":[],
 "source":"https://www.capitalone.com/credit-cards/venture-x/"},
 "Citi Double Cash":{"fee":0,"cpp":1.00,
 "rates":{"dining":2,"us_supermarkets":2,"airfare_direct":2,"hotels_direct":2,"portal_flights":2,"portal_hotels":5,"drugstores":2,"other":2},
 "caps":{},"ann":0,"benefits":[],
-"source":"https://www.citi.com/credit-cards/citi-double-cash-credit-card"},
+"auto_credit":None,"source":"https://www.citi.com/credit-cards/citi-double-cash-credit-card"},
 "Chase Freedom Unlimited":{"fee":0,"cpp":1.00,
 "rates":{"dining":3,"us_supermarkets":1.5,"airfare_direct":1.5,"hotels_direct":1.5,"portal_flights":5,"portal_hotels":5,"drugstores":3,"other":1.5},
 "caps":{},"ann":0,"benefits":[],
-"source":"https://creditcards.chase.com/cash-back-credit-cards/freedom/unlimited"},
+"auto_credit":None,"source":"https://creditcards.chase.com/cash-back-credit-cards/freedom/unlimited"},
 "Wells Fargo Active Cash":{"fee":0,"cpp":1.00,"rates":{k:2 for k in CATS},"caps":{},"ann":0,"benefits":[],
-"source":"https://www.wellsfargo.com/credit-cards/active-cash/"}}
+"auto_credit":None,"source":"https://www.wellsfargo.com/credit-cards/active-cash/"}}
 
 CASHLIKE={"Citi Double Cash","Chase Freedom Unlimited","Wells Fargo Active Cash"}
 DEFAULT={"dining":6000,"us_supermarkets":5000,"airfare_direct":2500,"hotels_direct":1500,"portal_flights":500,"portal_hotels":500,"drugstores":1000,"other":8000}
 def money(x): return f"${x:,.0f}"
 
 def solve(spend,cpp,bens,maxcards,horizon, allowed_cards=None, required_cards=None):
-    names=list(DB); cats=list(CATS); n=len(names); m=len(cats); q=n*m; N=2*q+n
+    """
+    MILP variables
+      X[i,j] = reward-earning spend in category j on card i at the category rate
+      Z[i,j] = post-cap spend in category j on card i at 1x
+      D[i,j] = spend covered by a modeled statement/travel credit; earns no rewards
+      Y[i]   = 1 when card i is carried, otherwise 0
+
+    D prevents double counting: a dollar covered by a modeled credit contributes $1
+    of credit value but earns no points when issuer terms say credited spend is ineligible.
+    """
+    names=list(DB); cats=list(CATS); n=len(names); m=len(cats); q=n*m; N=3*q+n
     allowed_cards=set(names if allowed_cards is None else allowed_cards)
     required_cards=set([] if required_cards is None else required_cards)
     c=np.zeros(N); ub=np.full(N,np.inf); integ=np.zeros(N)
-    X=lambda i,j:i*m+j; Z=lambda i,j:q+i*m+j; Y=lambda i:2*q+i
+    X=lambda i,j:i*m+j
+    Z=lambda i,j:q+i*m+j
+    D=lambda i,j:2*q+i*m+j
+    Y=lambda i:3*q+i
+
     for i,nm in enumerate(names):
         d=DB[nm]
+        credit=d.get("auto_credit")
         for j,cat in enumerate(cats):
             c[X(i,j)]=-d["rates"][cat]*cpp[nm]/100
             c[Z(i,j)]=-cpp[nm]/100
             if cat not in d["caps"]: ub[Z(i,j)]=0
+            if not credit or cat not in credit["eligible"]:
+                ub[D(i,j)]=0
+            else:
+                c[D(i,j)]=-1.0
         ann=d["ann"]*cpp[nm]/100 if horizon=="Ongoing annual economics" else 0
         c[Y(i)]=d["fee"]-bens[nm]-ann+1e-5
         ub[Y(i)]=1 if nm in allowed_cards else 0
         integ[Y(i)]=1
+
     rows=[]; lo=[]; hi=[]
+    # Every dollar of category spend is assigned exactly once.
     for j,cat in enumerate(cats):
         r={}
-        for i in range(n): r[X(i,j)]=1; r[Z(i,j)]=1
+        for i in range(n):
+            r[X(i,j)]=1; r[Z(i,j)]=1; r[D(i,j)]=1
         rows.append(r); lo.append(spend[cat]); hi.append(spend[cat])
+
     M=max(sum(spend.values()),1)
+    # No spend can flow to an unselected card.
     for i in range(n):
         r={Y(i):-M}
-        for j in range(m): r[X(i,j)]=1; r[Z(i,j)]=1
+        for j in range(m):
+            r[X(i,j)]=1; r[Z(i,j)]=1; r[D(i,j)]=1
         rows.append(r); lo.append(-np.inf); hi.append(0)
+
+    # Category bonus caps. Overflow goes to Z at 1x.
     for i,nm in enumerate(names):
         for cat,cap in DB[nm]["caps"].items():
             rows.append({X(i,cats.index(cat)):1,Y(i):-cap}); lo.append(-np.inf); hi.append(0)
+
+    # Statement/travel credit caps. D is eligible covered spend and earns no rewards.
+    for i,nm in enumerate(names):
+        credit=DB[nm].get("auto_credit")
+        if credit:
+            r={Y(i):-credit["cap"]}
+            for cat in credit["eligible"]:
+                r[D(i,cats.index(cat))]=1
+            rows.append(r); lo.append(-np.inf); hi.append(0)
+
     rows.append({Y(i):1 for i in range(n)}); lo.append(-np.inf); hi.append(maxcards)
     for i,nm in enumerate(names):
         if nm in required_cards:
             rows.append({Y(i):1}); lo.append(1); hi.append(1)
+
     A=lil_matrix((len(rows),N))
-    for rr,d in enumerate(rows):
-        for col,val in d.items(): A[rr,col]=val
+    for rr,dct in enumerate(rows):
+        for col,val in dct.items(): A[rr,col]=val
     res=milp(c,integrality=integ,bounds=Bounds(np.zeros(N),ub),
              constraints=LinearConstraint(A.tocsr(),np.array(lo),np.array(hi)))
     if not res.success:return None
-    v=res.x; selected=[names[i] for i in range(n) if v[Y(i)]>.5]
-    alloc=[]; gross=0; cg={x:0 for x in names}; cs={x:0 for x in names}
+
+    v=res.x
+    selected=[names[i] for i in range(n) if v[Y(i)]>.5]
+    alloc=[]; gross=0; credit_value=0
+    cg={x:0 for x in names}; cs={x:0 for x in names}; cc={x:0 for x in names}
     for i,nm in enumerate(names):
         for j,cat in enumerate(cats):
-            for amt,rate,tier in [(max(v[X(i,j)],0),DB[nm]["rates"][cat],"Bonus"),(max(v[Z(i,j)],0),1,"Post-cap")]:
+            pieces=[
+                (max(v[X(i,j)],0),DB[nm]["rates"][cat],"Reward earning"),
+                (max(v[Z(i,j)],0),1,"Post-cap"),
+                (max(v[D(i,j)],0),0,"Covered by credit")
+            ]
+            for amt,rate,tier in pieces:
                 if amt>1e-6:
-                    val=amt*rate*cpp[nm]/100; gross+=val; cg[nm]+=val; cs[nm]+=amt
+                    if tier=="Covered by credit":
+                        val=0; credit_value+=amt; cc[nm]+=amt
+                    else:
+                        val=amt*rate*cpp[nm]/100; gross+=val; cg[nm]+=val
+                    cs[nm]+=amt
                     alloc.append([CATS[cat],nm,amt,rate,cpp[nm],val,tier])
-    fees=sum(DB[x]["fee"] for x in selected); ben=sum(bens[x] for x in selected)
+
+    fees=sum(DB[x]["fee"] for x in selected)
+    manual_ben=sum(bens[x] for x in selected)
     ann=sum(DB[x]["ann"]*cpp[x]/100 for x in selected) if horizon=="Ongoing annual economics" else 0
     details=[]
     for x in selected:
         av=DB[x]["ann"]*cpp[x]/100 if horizon=="Ongoing annual economics" else 0
-        details.append({"Card":x,"Spend":cs[x],"Rewards":cg[x],"Benefits":bens[x],"Anniversary":av,
-                        "Fee":DB[x]["fee"],"Net":cg[x]+bens[x]+av-DB[x]["fee"]})
-    return {"selected":selected,"allocation":alloc,"gross":gross,"fees":fees,"benefits":ben,
-            "anniversary":ann,"net":gross+ben+ann-fees,"details":details}
+        total_ben=bens[x]+cc[x]
+        details.append({"Card":x,"Spend":cs[x],"Rewards":cg[x],"Benefits":total_ben,
+                        "Anniversary":av,"Fee":DB[x]["fee"],
+                        "Net":cg[x]+total_ben+av-DB[x]["fee"]})
+    total_ben=manual_ben+credit_value
+    return {"selected":selected,"allocation":alloc,"gross":gross,"fees":fees,
+            "benefits":total_ben,"manual_benefits":manual_ben,"credits":credit_value,
+            "anniversary":ann,"net":gross+total_ben+ann-fees,"details":details}
 
 st.markdown("""<div class="hero61">
 <div class="brand">Card<span>Opt</span></div>
@@ -260,7 +341,7 @@ if "page" not in st.session_state:
     st.session_state.page = "Home"
 
 if st.session_state.experience is None:
-    n0,n1,n2,n3,n4,n5=st.columns([3.2,1,0.75,0.85,0.75,1])
+    n0,n1,n2,n3,n4,n5,n6,n7=st.columns([2.15,0.9,0.62,0.72,0.62,0.98,0.62,0.86])
     with n0: st.markdown('<div class="topbrand">Card<span>Opt</span></div>',unsafe_allow_html=True)
     with n1:
         if st.button("How It Works",use_container_width=True): st.session_state.page="How It Works"
@@ -269,8 +350,12 @@ if st.session_state.experience is None:
     with n3:
         if st.button("Research",use_container_width=True): st.session_state.page="Research"
     with n4:
-        if st.button("About",use_container_width=True): st.session_state.page="About"
+        if st.button("Learn",use_container_width=True): st.session_state.page="Learn"
     with n5:
+        if st.button("Math & Model",use_container_width=True): st.session_state.page="Math & Model"
+    with n6:
+        if st.button("About",use_container_width=True): st.session_state.page="About"
+    with n7:
         if st.button("Get Started",type="primary",use_container_width=True): st.session_state.page="Home"
 
     if st.session_state.page == "How It Works":
@@ -299,7 +384,17 @@ if st.session_state.experience is None:
                 st.markdown(html,unsafe_allow_html=True)
                 with st.expander("View modeled terms"):
                     st.write("Default model point value: **"+format(d["cpp"],".2f")+"¢**")
-                    st.dataframe(pd.DataFrame([[CATS[k],str(v)+"x"] for k,v in d["rates"].items()],columns=["Category","Rate"]),hide_index=True,use_container_width=True)
+                    if nm=="Wells Fargo Active Cash":
+                        st.success("Flat-rate structure: unlimited 2% cash rewards on purchases across all modeled categories.")
+                    elif nm=="Citi Double Cash":
+                        st.success("Flat-rate structure: 2% total cash back on purchases (1% when you buy + 1% as you pay), plus 5% total on eligible Citi Travel hotels in CardOpt's modeled categories.")
+                    elif nm=="Chase Freedom Unlimited":
+                        st.info("1.5% is the base rate, not a supermarket or direct-travel bonus. Dining and drugstores earn 3%; Chase Travel earns 5%.")
+                    st.dataframe(pd.DataFrame([[CATS[k],(str(v)+"x" + (" base" if nm=="Chase Freedom Unlimited" and v==1.5 else ""))] for k,v in d["rates"].items()],columns=["Category","Modeled rate"]),hide_index=True,use_container_width=True)
+                    if d.get("auto_credit"):
+                        ac=d["auto_credit"]
+                        st.write("Modeled automatic/eligible credit: **"+ac["name"]+" up to $"+format(ac["cap"],",")+"**")
+                        st.caption(ac["note"])
                     if d["caps"]: st.write("Modeled caps: "+", ".join(CATS[k]+" $"+format(v,",") for k,v in d["caps"].items()))
                     if d["benefits"]:
                         st.write("Optional user-valued recurring benefits:")
@@ -308,8 +403,112 @@ if st.session_state.experience is None:
         st.caption("Terms reviewed "+VERIFIED+". Issuer terms can change.")
         st.stop()
 
+    if st.session_state.page == "Learn":
+        st.markdown('<div class="pagehero"><div class="eyebrow">CardOpt Learn</div><h1>Understand the money before optimizing it.</h1><p>A practical introduction to credit cards, rewards and wallet decisions for anyone who wants the concepts without the jargon.</p></div>',unsafe_allow_html=True)
+
+        st.markdown("""<div class="premium-strip">
+        <div class="premium-pill"><b>Start with the basics</b><span>Learn statements, APR, utilization and why paying in full matters.</span></div>
+        <div class="premium-pill"><b>Understand rewards</b><span>Separate multipliers, cash back, points, credits and annual fees.</span></div>
+        <div class="premium-pill"><b>Build your wallet</b><span>Practice choosing a simple card setup before using the optimizer.</span></div>
+        </div>""",unsafe_allow_html=True)
+
+        basics,rewards,wallet=st.tabs(["Credit Card Basics","Rewards 101","Build Your Wallet"])
+
+        with basics:
+            st.markdown("### The rule that comes before rewards")
+            st.info("Rewards are valuable only when they are not outweighed by interest or unnecessary spending. CardOpt's optimizer models rewards and recurring card economics, not borrowing costs.")
+            c1,c2=st.columns(2)
+            with c1:
+                st.markdown("""<div class="research-card"><h3>Statement balance</h3><p>The amount shown on your statement for that billing cycle. Paying the statement balance in full by the due date is the key behavior for avoiding purchase interest when a grace period applies.</p></div>""",unsafe_allow_html=True)
+                st.markdown("""<div class="research-card"><h3>APR</h3><p>Annual Percentage Rate is the annualized rate used to express borrowing cost. A rewards card can become expensive quickly if purchases accrue interest.</p></div>""",unsafe_allow_html=True)
+            with c2:
+                st.markdown("""<div class="research-card"><h3>Credit utilization</h3><p>The share of available revolving credit currently being used. It is different from a spending budget and can affect credit scoring.</p></div>""",unsafe_allow_html=True)
+                st.markdown("""<div class="research-card"><h3>Annual fee</h3><p>A yearly card cost. A fee is not automatically good or bad. The useful question is whether the value you realistically receive exceeds the cost for your spending and habits.</p></div>""",unsafe_allow_html=True)
+            st.warning("CardOpt is not telling users to open more accounts or spend more. It optimizes a modeled wallet under the spending and constraints the user supplies.")
+
+        with rewards:
+            st.markdown("### How rewards actually work")
+            r1,r2=st.columns(2)
+            with r1:
+                st.markdown("""<div class="research-card"><h3>Cash back</h3><p>A 2% cash-back rate means $2 of rewards for each $100 of eligible purchases, subject to the issuer's terms.</p></div>""",unsafe_allow_html=True)
+                st.markdown("""<div class="research-card"><h3>Points and miles</h3><p>A 4X card earns four points per eligible dollar, but 4X is not the same as 4% unless each point is worth exactly one cent for the redemption being modeled.</p></div>""",unsafe_allow_html=True)
+                st.markdown("""<div class="research-card"><h3>Reward caps</h3><p>Some bonus categories stop earning the elevated rate after a spending threshold. CardOpt explicitly models caps for the capped categories in its research set.</p></div>""",unsafe_allow_html=True)
+            with r2:
+                st.markdown("""<div class="research-card"><h3>Credits and benefits</h3><p>A $100 credit is not necessarily worth $100 to every person. Restricted lifestyle benefits start at $0 in CardOpt so users value only what they realistically expect to use.</p></div>""",unsafe_allow_html=True)
+                st.markdown("""<div class="research-card"><h3>Point valuation</h3><p>The cash value of transferable points depends on redemption. CardOpt therefore labels cents-per-point values as model assumptions rather than issuer facts.</p></div>""",unsafe_allow_html=True)
+                st.markdown("""<div class="research-card"><h3>Net annual value</h3><p>CardOpt compares estimated reward value, modeled benefits and applicable anniversary value against annual fees. That portfolio economics view is more informative than comparing headline multipliers alone.</p></div>""",unsafe_allow_html=True)
+            st.markdown("#### Quick example")
+            st.write("If you spend **$10,000 on dining**, a hypothetical 4X card with points modeled at 1.5 cents each produces **$600** of modeled reward value. With a **$325 annual fee** and no other valued benefits, that is **$275** before considering anything else. A no-fee 3% card would produce **$300**. A bigger multiplier does not automatically mean a better card.")
+
+        with wallet:
+            st.markdown("### Build Your Wallet")
+            st.write("This is a learning exercise, not another optimizer. Pick the statements that sound most like you and CardOpt will explain what kind of wallet structure is worth exploring.")
+            annual_fee=st.radio("How do you feel about annual fees?",["I want to avoid them while learning","I am open to one if the math supports it"],horizontal=True,key="learn_fee")
+            simplicity=st.radio("How much complexity do you want?",["Keep it simple","I am comfortable using different cards by category"],horizontal=True,key="learn_complex")
+            travel=st.radio("Do travel rewards matter to you?",["Not really","Sometimes","Yes, a lot"],horizontal=True,key="learn_travel")
+            payoff=st.radio("Which statement best describes your plan?",["Pay the statement balance in full","I may carry a balance"],horizontal=True,key="learn_payoff")
+
+            if payoff=="I may carry a balance":
+                st.error("Focus on borrowing cost before optimizing rewards. Interest can outweigh rewards quickly. CardOpt's rewards optimizer intentionally does not model APR or recommend borrowing.")
+            elif annual_fee=="I want to avoid them while learning" and simplicity=="Keep it simple":
+                st.success("A simple no-annual-fee, flat-rate structure is a useful starting point to understand. You can then compare whether category bonuses would add enough value to justify more complexity.")
+            elif travel=="Yes, a lot" and annual_fee=="I am open to one if the math supports it":
+                st.success("You may benefit from comparing travel-oriented cards, but evaluate the annual fee, realistic credit usage, redemption value and booking restrictions together. Headline multipliers alone are not enough.")
+            else:
+                st.success("A small portfolio may be worth comparing: a strong everyday card plus a category card can capture more value without making the wallet unnecessarily complicated.")
+
+            st.markdown("""<div class="callout"><strong>Ready for the real model?</strong><br>Build Your Wallet teaches the decision logic. Simple Mode and Advanced Mode use the actual CardOpt optimization engine to evaluate the modeled cards and your spending.</div>""",unsafe_allow_html=True)
+            if st.button("Use CardOpt optimizer",type="primary",key="learn_to_home"):
+                st.session_state.page="Home"; st.rerun()
+        st.stop()
+
+    if st.session_state.page == "Math & Model":
+        st.markdown('<div class="pagehero"><div class="eyebrow">Math & Model</div><h1>The mathematics behind CardOpt.</h1><p>See the decision variables, objective function, constraints and assumptions used to turn a wallet decision into a mixed-integer linear program.</p></div>',unsafe_allow_html=True)
+        st.markdown("""<div class="premium-strip">
+        <div class="premium-pill"><b>Binary decisions</b><span>Should a card be in the wallet?</span></div>
+        <div class="premium-pill"><b>Continuous decisions</b><span>How much category spend goes to each card?</span></div>
+        <div class="premium-pill"><b>Linear optimization</b><span>Maximize modeled recurring net value under explicit constraints.</span></div>
+        </div>""",unsafe_allow_html=True)
+
+        st.markdown("### 1. Decision variables")
+        st.latex(r"y_i \in \{0,1\}")
+        st.write("**yᵢ** equals 1 when card *i* is selected and 0 otherwise.")
+        st.latex(r"x_{ij} \ge 0")
+        st.write("**xᵢⱼ** is reward-earning spending from category *j* assigned to card *i*.")
+        st.latex(r"z_{ij} \ge 0")
+        st.write("**zᵢⱼ** is spending above a modeled category cap. CardOpt models that overflow at the card's post-cap rate, currently 1x for the capped categories in this research set.")
+        st.latex(r"d_{ij} \ge 0")
+        st.write("**dᵢⱼ** is eligible spend covered by a modeled statement/travel credit. It contributes credit value but earns no rewards when issuer terms exclude rewards on credited spend.")
+
+        st.markdown("### 2. Objective function")
+        st.latex(r"\max \left[\sum_{i,j} r_{ij}v_i x_{ij}+\sum_{i,j} v_i z_{ij}+\sum_{i,j} d_{ij}+\sum_i b_i y_i+\sum_i a_i y_i-\sum_i f_i y_i\right]")
+        st.write("Here **rᵢⱼ** is the reward multiplier, **vᵢ** is cents-per-point converted to dollars, **bᵢ** is user-valued recurring benefit value, **aᵢ** is applicable anniversary value, and **fᵢ** is the annual fee.")
+
+        st.markdown("### 3. Core constraints")
+        st.write("**Spend conservation**: every modeled dollar must be assigned exactly once.")
+        st.latex(r"\sum_i (x_{ij}+z_{ij}+d_{ij}) = S_j \quad \forall j")
+        st.write("**Card activation**: spending can flow only to a selected card.")
+        st.latex(r"\sum_j (x_{ij}+z_{ij}+d_{ij}) \le M y_i \quad \forall i")
+        st.write("**Wallet size**: the number of selected cards cannot exceed the user's limit.")
+        st.latex(r"\sum_i y_i \le K")
+        st.write("**Reward caps**: bonus-rate spending is bounded by each issuer cap.")
+        st.latex(r"x_{ij} \le C_{ij}y_i")
+        st.write("**Credit caps**: credit-covered eligible spend cannot exceed the issuer's modeled annual credit.")
+        st.latex(r"\sum_{j \in E_i}d_{ij} \le T_i y_i")
+
+        st.markdown("### 4. Why this is a MILP")
+        st.write("The model mixes binary card-selection variables with continuous spending-allocation variables, while keeping the objective and constraints linear. That is the defining structure of mixed-integer linear programming.")
+        st.markdown("### 5. What is fact vs assumption?")
+        st.markdown("""<div class="research-card"><p><b>Issuer facts</b>: annual fees, published earning rates, reward caps, anniversary rewards and eligible credits.<br><br>
+        <b>User inputs</b>: annual spending, maximum wallet size and personal value assigned to restricted recurring benefits.<br><br>
+        <b>Model assumptions</b>: cents-per-point values, the 2% comparison benchmark, excluded features and category mapping.<br><br>
+        <b>Calculated outputs</b>: selected portfolio, spending allocation, reward value, modeled credits, fees and estimated net annual value.</p></div>""",unsafe_allow_html=True)
+        st.info("CardOpt is a recurring-value model, not a forecast of realized returns. Welcome offers, interest, approval odds, taxes, credit-score effects, merchant coding uncertainty and transfer-partner availability are outside the optimization.")
+        st.stop()
+
     if st.session_state.page == "Research":
         st.markdown('<div class="pagehero"><div class="eyebrow">Research</div><h1>Transparent by design.</h1><p>The optimization is useful only if its assumptions, constraints and data can be inspected.</p></div>',unsafe_allow_html=True)
+        st.markdown("""<div class="premium-strip"><div class="premium-pill"><b>Issuer facts</b><span>Rates and fees sourced from official issuer materials.</span></div><div class="premium-pill"><b>Visible assumptions</b><span>Point values and user benefit values are never disguised as issuer facts.</span></div><div class="premium-pill"><b>Reproducible model</b><span>Objective, variables and constraints are documented in Math & Model.</span></div></div>""",unsafe_allow_html=True)
         st.markdown("""<div class="research-card"><h3>Optimization model</h3><p>CardOpt uses mixed-integer linear programming. Binary variables represent whether a card is selected. Continuous variables represent category-level spending allocated to each card.</p></div>""",unsafe_allow_html=True)
         st.latex(r"\max\; \text{reward value} + \text{user-valued benefits} + \text{anniversary value} - \text{annual fees}")
         r1,r2=st.columns(2)
@@ -371,7 +570,7 @@ with st.sidebar:
     horizon=st.radio("Time horizon",["Ongoing annual economics","First-year recurring economics"])
     st.caption("Ongoing includes applicable anniversary rewards. First-year recurring excludes rewards that begin after the first anniversary.")
 
-tabs=st.tabs(["Spending","Benefits","Reward assumptions","Research"])
+tabs=st.tabs(["Spending","Benefits","Reward assumptions","Methodology"])
 
 with tabs[0]:
     st.subheader("Your annual spending")
@@ -384,7 +583,7 @@ with tabs[0]:
 bens={}
 with tabs[1]:
     st.subheader("What are the benefits worth to you?")
-    st.markdown('<div class="note">Restricted credits are not automatically worth face value. Start at $0 and add only value you realistically expect to use on purchases you would otherwise make.</div>',unsafe_allow_html=True)
+    st.markdown('<div class="note">Restricted lifestyle credits are not automatically worth face value. Start at $0 and add only value you realistically expect to use. The Sapphire Reserve and Venture X travel credits are modeled separately against eligible planned travel spend so credited dollars do not also earn rewards.</div>',unsafe_allow_html=True)
     for nm,d in DB.items():
         with st.expander(nm,expanded=(nm=="Capital One Venture X")):
             total=0
@@ -405,6 +604,7 @@ with tabs[2]:
 
 with tabs[3]:
     st.subheader("How CardOpt works")
+    st.caption("For the full mathematical formulation, return to the welcome screen and open Math & Model.")
     st.write("CardOpt uses mixed-integer linear programming. Binary variables decide which cards enter the wallet; continuous variables decide how much spending in each category goes to each selected card.")
     st.markdown("**Objective** · Maximize estimated recurring economic value: reward value + user-valued recurring benefits + applicable anniversary value − annual fees.")
     st.markdown("**Constraints** · Allocate every dollar, route spend only to selected cards, enforce modeled category caps, and respect the user's maximum wallet size.")
