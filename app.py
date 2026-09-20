@@ -82,6 +82,60 @@ small,.stCaption,[data-testid="stCaptionContainer"]{color:var(--muted)!important
 .creditcard{height:196px!important;border-radius:20px!important;padding:1.35rem!important;border:1px solid rgba(255,255,255,.28)!important;box-shadow:0 20px 42px rgba(12,32,68,.22)!important;isolation:isolate}.creditcard:before{content:"";position:absolute;inset:0;background:linear-gradient(115deg,rgba(255,255,255,.18),transparent 34%,rgba(255,255,255,.04) 55%,transparent);z-index:-1}.creditcard .issuer{font-size:.7rem!important;font-weight:700;letter-spacing:.14em!important}.creditcard .cardname{font-size:1.18rem!important}.creditcard .chip{width:40px!important;height:29px!important;border:1px solid rgba(110,80,20,.25)}.creditcard .fee{font-weight:600}
 .chase{background:linear-gradient(135deg,#06152f,#0b3c70 55%,#1479bb)!important}.amex{background:linear-gradient(135deg,#9a752e,#e2c776 48%,#f4e4aa)!important;color:#17203a!important}.capone{background:linear-gradient(145deg,#0b1729,#173658 62%,#274e74)!important}.citi{background:linear-gradient(145deg,#12366f,#2d7cc0)!important}.freedom{background:linear-gradient(145deg,#184b83,#62a8dc)!important}.wells{background:linear-gradient(145deg,#651426,#b62b46)!important}
 @media(max-width:850px){.premium-strip{grid-template-columns:1fr}.main .block-container{padding-left:1rem;padding-right:1rem}}
+
+/* V6.5 PRODUCT POLISH */
+div.stButton > button,
+div.stDownloadButton > button{
+  background:linear-gradient(135deg,#14233f,#1f355c)!important;
+  border:1px solid #2e466d!important;
+  color:#f8fbff!important;
+  font-weight:750!important;
+  box-shadow:0 8px 22px rgba(18,38,70,.14)!important;
+}
+div.stButton > button *,
+div.stDownloadButton > button *{color:#f8fbff!important}
+div.stButton > button:hover,
+div.stDownloadButton > button:hover{
+  background:linear-gradient(135deg,#1c3762,#24599a)!important;
+  border-color:#4c7db5!important;
+  color:#fff!important;
+  transform:translateY(-1px);
+}
+div.stButton > button[kind="primary"]{
+  background:linear-gradient(135deg,#1769e0,#5146d8)!important;
+  border-color:transparent!important;color:#fff!important;
+}
+div.stButton > button[kind="primary"] *{color:#fff!important}
+
+/* Keep all decorative cards inside their own artwork region */
+.hero{overflow:hidden!important;position:relative!important;min-height:510px!important}
+.heroArt{position:absolute!important;right:2.5%!important;top:9%!important;width:37%!important;height:72%!important;pointer-events:none!important}
+.heroCard{position:absolute!important;max-width:270px!important}
+.heroCard.one{right:10%!important;top:0!important;transform:rotate(7deg)!important}
+.heroCard.two{right:22%!important;top:31%!important;transform:rotate(-6deg)!important}
+.heroCard.three{right:0!important;top:48%!important;transform:rotate(8deg)!important}
+.heroCopy{position:relative!important;z-index:4!important;width:58%!important}
+.heroStats{position:relative!important;z-index:4!important;width:58%!important}
+
+/* More product-like sections */
+.pagehero{background:linear-gradient(125deg,#f8fbff,#edf5ff)!important;border:1px solid #dce8f7!important;border-radius:24px!important;padding:28px 30px!important;margin-bottom:22px!important;box-shadow:0 14px 40px rgba(28,72,125,.07)!important}
+.infoCard,.mode,.research-card{border:1px solid #dce7f5!important;box-shadow:0 12px 34px rgba(31,70,120,.07)!important}
+.infoCard:hover,.research-card:hover{box-shadow:0 18px 42px rgba(31,70,120,.11)!important}
+.callout{background:linear-gradient(110deg,#f5f9ff,#f3f0ff)!important;border:1px solid #dfe5f5!important;border-radius:18px!important}
+[data-testid="stMetric"]{background:linear-gradient(180deg,#fff,#f8fbff)!important}
+[data-testid="stExpander"]{box-shadow:0 7px 22px rgba(32,68,110,.04)!important}
+[data-testid="stTabs"]{background:#fff!important}
+[data-testid="stTabs"] [role="tablist"]{gap:8px!important;border-bottom:1px solid #e4ebf5!important}
+[data-testid="stTabs"] button{background:#f6f9fd!important;border-radius:10px 10px 0 0!important;padding:.55rem .9rem!important}
+[data-testid="stTabs"] button[aria-selected="true"]{background:#eaf3ff!important}
+[data-testid="stTabs"] button[aria-selected="true"] p{color:#0d63d8!important}
+.stSelectbox>div>div,.stMultiSelect>div>div,.stNumberInput>div>div{border-radius:12px!important}
+@media(max-width:900px){
+ .hero{min-height:auto!important;padding-bottom:30px!important}
+ .heroCopy,.heroStats{width:100%!important}
+ .heroArt{position:relative!important;right:auto!important;top:auto!important;width:100%!important;height:250px!important;margin-top:18px!important}
+ .heroCard{max-width:220px!important}
+}
 </style>
 """, unsafe_allow_html=True)
 
