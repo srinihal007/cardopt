@@ -1,6 +1,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import requests
+import os
+import io
+import json
+import secrets
+from datetime import datetime, timedelta
 from scipy.optimize import milp, LinearConstraint, Bounds
 from scipy.sparse import lil_matrix
 
@@ -149,6 +155,25 @@ div.stButton>button[kind="primary"] *,div.stButton>button[data-testid="stBaseBut
 @media(max-width:1050px){.block-container{padding-left:1.1rem!important;padding-right:1.1rem!important}.premium-strip{grid-template-columns:repeat(2,minmax(0,1fr))}.orbit{opacity:.9;right:1.3rem}.hero61 h1{max-width:580px}}
 @media(max-width:850px){.orbit{display:none}.hero61{padding:2rem 1.4rem}.hero61 .brand{margin-bottom:2rem}.premium-strip,.learn-path,.lesson-grid{grid-template-columns:1fr}.pagehero,.learn-hero{padding:1.55rem}.modecard{min-height:auto}[data-testid="stMetricValue"]{font-size:1.45rem!important}}
 @media(max-width:640px){.block-container{padding-left:.8rem!important;padding-right:.8rem!important}.stats{gap:.75rem}.stat{border:0;margin-right:.4rem;padding-right:.4rem}.hero61 h1{font-size:2.45rem!important}[data-testid="stSidebar"]{min-width:275px!important}}
+
+/* CardOpt 2.0: decision engine + real-spend analysis */
+.data-source-banner{padding:1.1rem 1.2rem;border:1px solid #cfe1f7;border-radius:18px;background:linear-gradient(120deg,#f4f9ff,#f8f6ff);margin:.7rem 0 1rem}
+.data-source-banner b{display:block;color:var(--navy)!important;font-size:1rem;margin-bottom:.2rem}
+.data-source-banner span{color:var(--muted)!important;font-size:.9rem;line-height:1.5}
+.insight-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:.85rem 0 1.15rem}
+.insight-card{padding:1.15rem 1.2rem;border:1px solid var(--line);border-radius:18px;background:linear-gradient(145deg,#fff,#f8fbff);box-shadow:0 8px 22px rgba(35,72,116,.045)}
+.insight-card .kicker{font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:#5e74a0!important;font-weight:800}
+.insight-card .big{font-size:1.55rem;line-height:1.1;font-weight:820;color:var(--navy)!important;margin:.35rem 0}
+.insight-card p{font-size:.9rem;line-height:1.5;color:var(--muted)!important;margin:0}
+.decision-banner{padding:1.35rem 1.4rem;border-radius:20px;border:1px solid #cfe0f7;background:radial-gradient(circle at 92% 20%,rgba(91,67,235,.12),transparent 30%),linear-gradient(120deg,#edf7ff,#faf8ff);margin:1rem 0}
+.decision-banner h3{margin:0 0 .4rem!important}
+.decision-banner p{margin:0!important;color:#5b6f90!important;line-height:1.55}
+.status-good,.status-warn{display:inline-flex;padding:.28rem .58rem;border-radius:999px;font-size:.75rem;font-weight:800}
+.status-good{background:#e9f8ef;color:#167344!important}.status-warn{background:#fff4df;color:#925c00!important}
+.plaid-box{padding:1.15rem;border:1px solid #d6e5f7;border-radius:18px;background:#fff;margin:.75rem 0}
+.plaid-box strong{color:var(--navy)!important}
+.micro-note{font-size:.82rem;color:var(--muted)!important;line-height:1.5}
+@media(max-width:850px){.insight-grid{grid-template-columns:1fr}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -195,20 +220,297 @@ CASHLIKE={"Citi Double Cash","Chase Freedom Unlimited","Wells Fargo Active Cash"
 DEFAULT={"dining":6000,"us_supermarkets":5000,"airfare_direct":2500,"hotels_direct":1500,"portal_flights":500,"portal_hotels":500,"drugstores":1000,"other":8000}
 def money(x): return f"${x:,.0f}"
 
-def solve(spend,cpp,bens,maxcards,horizon, allowed_cards=None, required_cards=None):
-    """
-    MILP variables
-      X[i,j] = reward-earning spend in category j on card i at the category rate
-      Z[i,j] = post-cap spend in category j on card i at 1x
-      D[i,j] = spend covered by a modeled statement/travel credit; earns no rewards
-      Y[i]   = 1 when card i is carried, otherwise 0
 
-    D prevents double counting: a dollar covered by a modeled credit contributes $1
-    of credit value but earns no points when issuer terms say credited spend is ineligible.
+# ---------- Data, Plaid, and decision-economics helpers ----------
+
+EXCLUDED_PFC_PREFIXES = (
+    "TRANSFER_", "INCOME", "LOAN_PAYMENTS", "BANK_FEES",
+)
+
+GROCERY_KEYWORDS = (
+    "shoprite","whole foods","trader joe","kroger","publix","aldi","wegmans",
+    "stop & shop","safeway","h mart","lidl","food lion","giant food","acme"
+)
+DINING_KEYWORDS = (
+    "restaurant","cafe","coffee","pizza","grill","diner","doordash","uber eats",
+    "grubhub","starbucks","chipotle","panera","mcdonald","taco bell","chick-fil-a"
+)
+DRUGSTORE_KEYWORDS = ("cvs","walgreens","rite aid","pharmacy","drugstore")
+AIRLINE_KEYWORDS = (
+    "airlines","airways","united","delta","american airlines","jetblue",
+    "southwest","spirit airlines","frontier airlines"
+)
+HOTEL_KEYWORDS = (
+    "hotel","hotels","marriott","hilton","hyatt","ihg","holiday inn","sheraton",
+    "westin","ritz-carlton","hampton inn"
+)
+PORTAL_KEYWORDS = (
+    "chase travel","capital one travel","amex travel","american express travel",
+    "citi travel"
+)
+
+MCC_MAP = {
+    "5812":"dining","5814":"dining",
+    "5411":"us_supermarkets",
+    "5912":"drugstores",
+    "4511":"airfare_direct",
+    "7011":"hotels_direct",
+}
+
+def safe_secret(name, default=None):
+    try:
+        return st.secrets[name]
+    except Exception:
+        return os.getenv(name, default)
+
+def plaid_is_configured():
+    return bool(safe_secret("PLAID_CLIENT_ID") and safe_secret("PLAID_SECRET"))
+
+def plaid_base_url():
+    env=str(safe_secret("PLAID_ENV","sandbox")).lower().strip()
+    return "https://production.plaid.com" if env=="production" else "https://sandbox.plaid.com"
+
+def plaid_post(path, payload):
+    client_id=safe_secret("PLAID_CLIENT_ID")
+    secret=safe_secret("PLAID_SECRET")
+    if not client_id or not secret:
+        raise RuntimeError("Plaid credentials are not configured.")
+    headers={
+        "Content-Type":"application/json",
+        "PLAID-CLIENT-ID":str(client_id),
+        "PLAID-SECRET":str(secret),
+    }
+    r=requests.post(plaid_base_url()+path,headers=headers,json=payload,timeout=30)
+    try:
+        body=r.json()
+    except Exception:
+        body={"error_message":r.text}
+    if r.status_code>=400:
+        msg=body.get("error_message") or body.get("error_code") or f"Plaid request failed ({r.status_code})."
+        raise RuntimeError(msg)
+    return body
+
+def create_plaid_hosted_link(client_user_id):
+    payload={
+        "client_name":"CardOpt",
+        "country_codes":["US"],
+        "language":"en",
+        "user":{"client_user_id":client_user_id},
+        "products":["transactions"],
+        "transactions":{"days_requested":365},
+        "hosted_link":{"url_lifetime_seconds":1800},
+    }
+    redirect_uri=safe_secret("PLAID_REDIRECT_URI")
+    app_url=safe_secret("CARDOPT_APP_URL")
+    webhook=safe_secret("PLAID_WEBHOOK_URL")
+    if redirect_uri:
+        payload["redirect_uri"]=str(redirect_uri)
+    if app_url:
+        payload["hosted_link"]["completion_redirect_uri"]=str(app_url)
+    if webhook:
+        payload["webhook"]=str(webhook)
+    return plaid_post("/link/token/create",payload)
+
+def get_public_tokens_from_link(link_token):
+    data=plaid_post("/link/token/get",{"link_token":link_token})
+    tokens=[]
+    results=(data.get("results") or {})
+    for item in results.get("item_add_results") or []:
+        t=item.get("public_token")
+        if t: tokens.append(t)
+    if not tokens:
+        old=(data.get("on_success") or {})
+        t=old.get("public_token")
+        if t: tokens.append(t)
+    # Deduplicate while preserving order
+    return list(dict.fromkeys(tokens))
+
+def exchange_public_token(public_token):
+    data=plaid_post("/item/public_token/exchange",{"public_token":public_token})
+    return data["access_token"], data.get("item_id")
+
+def sync_plaid_transactions(access_token, cursor=None):
+    all_added=[]; all_modified=[]; removed=[]
+    next_cursor=cursor
+    for _ in range(20):
+        payload={"access_token":access_token,"count":500}
+        if next_cursor:
+            payload["cursor"]=next_cursor
+        data=plaid_post("/transactions/sync",payload)
+        all_added.extend(data.get("added") or [])
+        all_modified.extend(data.get("modified") or [])
+        removed.extend(data.get("removed") or [])
+        next_cursor=data.get("next_cursor")
+        if not data.get("has_more"):
+            break
+    return all_added, all_modified, removed, next_cursor
+
+def normalize_text(x):
+    if x is None or (isinstance(x,float) and np.isnan(x)): return ""
+    return str(x).strip().lower()
+
+def classify_transaction(primary="", detailed="", merchant="", mcc="", plaid_confidence=None):
+    primary_u=str(primary or "").upper()
+    detailed_u=str(detailed or "").upper()
+    merchant_l=normalize_text(merchant)
+    mcc_s=str(mcc or "").strip().replace(".0","")
+    joined=(primary_u+" "+detailed_u+" "+merchant_l).strip()
+
+    if any(primary_u.startswith(x) for x in EXCLUDED_PFC_PREFIXES):
+        return None,"Excluded","Non-spend / transfer-like Plaid category"
+
+    # Explicit issuer portals first because otherwise a portal hotel/flight may look direct.
+    if any(k in merchant_l for k in PORTAL_KEYWORDS):
+        if "FLIGHT" in detailed_u or "AIR" in detailed_u or any(k in merchant_l for k in AIRLINE_KEYWORDS):
+            return "portal_flights","High","Recognized issuer travel portal"
+        if "HOTEL" in detailed_u or "LODG" in detailed_u or any(k in merchant_l for k in HOTEL_KEYWORDS):
+            return "portal_hotels","High","Recognized issuer travel portal"
+        return "portal_hotels","Medium","Issuer travel portal; category inferred as travel lodging"
+
+    if mcc_s in MCC_MAP:
+        return MCC_MAP[mcc_s],"High","Merchant category code mapping"
+
+    if "GROC" in detailed_u or "SUPERMARKET" in detailed_u:
+        cat="us_supermarkets"
+    elif any(k in merchant_l for k in GROCERY_KEYWORDS):
+        cat="us_supermarkets"
+    elif "RESTAURANT" in detailed_u or "FAST_FOOD" in detailed_u or "COFFEE" in detailed_u or "BAR" in detailed_u:
+        cat="dining"
+    elif primary_u=="FOOD_AND_DRINK" or any(k in merchant_l for k in DINING_KEYWORDS):
+        cat="dining"
+    elif "PHARM" in detailed_u or any(k in merchant_l for k in DRUGSTORE_KEYWORDS):
+        cat="drugstores"
+    elif "FLIGHT" in detailed_u or "AIRLINE" in detailed_u or any(k in merchant_l for k in AIRLINE_KEYWORDS):
+        cat="airfare_direct"
+    elif "HOTEL" in detailed_u or "LODG" in detailed_u or any(k in merchant_l for k in HOTEL_KEYWORDS):
+        cat="hotels_direct"
+    else:
+        cat="other"
+
+    conf=str(plaid_confidence or "").upper()
+    if conf in ("VERY_HIGH","HIGH"):
+        level="High"
+    elif conf=="MEDIUM":
+        level="Medium"
+    elif conf in ("LOW","UNKNOWN"):
+        level="Low"
+    else:
+        # Heuristic mapping from non-Plaid CSV fields
+        level="Medium" if cat!="other" else "Low"
+    reason="Plaid personal-finance category / merchant heuristic" if (primary_u or detailed_u) else "Merchant-description heuristic"
+    return cat,level,reason
+
+def plaid_transactions_to_frame(transactions):
+    rows=[]
+    for t in transactions:
+        pfc=t.get("personal_finance_category") or {}
+        rows.append({
+            "date":t.get("date") or t.get("authorized_date"),
+            "amount":t.get("amount"),
+            "merchant":t.get("merchant_name") or t.get("name") or "",
+            "primary":pfc.get("primary",""),
+            "detailed":pfc.get("detailed",""),
+            "plaid_confidence":pfc.get("confidence_level",""),
+            "mcc":t.get("merchant_category_code") or "",
+            "payment_channel":t.get("payment_channel") or "",
+            "transaction_id":t.get("transaction_id") or "",
+        })
+    return pd.DataFrame(rows)
+
+def csv_to_normalized_frame(df, purchase_sign="positive"):
+    # Flexible column discovery for common bank exports and Plaid-style CSVs.
+    cols={str(c).lower().strip():c for c in df.columns}
+    def find_col(*names):
+        for n in names:
+            if n in cols: return cols[n]
+        for low,orig in cols.items():
+            if any(n in low for n in names): return orig
+        return None
+
+    amount_col=find_col("amount","transaction amount","debit")
+    if amount_col is None:
+        raise ValueError("Could not find an amount column. Include a column named Amount.")
+    date_col=find_col("date","transaction date","posted date","posting date")
+    merchant_col=find_col("merchant_name","merchant","description","name","memo")
+    primary_col=find_col("personal_finance_category.primary","primary category","primary")
+    detailed_col=find_col("personal_finance_category.detailed","detailed category","detailed","category")
+    conf_col=find_col("confidence_level","confidence")
+    mcc_col=find_col("merchant_category_code","mcc")
+
+    out=pd.DataFrame()
+    out["amount"]=pd.to_numeric(df[amount_col],errors="coerce").fillna(0.0)
+    if purchase_sign=="negative":
+        out["amount"]=-out["amount"]
+    out["date"]=pd.to_datetime(df[date_col],errors="coerce") if date_col is not None else pd.NaT
+    out["merchant"]=df[merchant_col].astype(str) if merchant_col is not None else ""
+    out["primary"]=df[primary_col].astype(str) if primary_col is not None else ""
+    out["detailed"]=df[detailed_col].astype(str) if detailed_col is not None else ""
+    out["plaid_confidence"]=df[conf_col].astype(str) if conf_col is not None else ""
+    out["mcc"]=df[mcc_col].astype(str) if mcc_col is not None else ""
+    return out
+
+def build_spending_profile(df, annualize=False):
+    if df is None or len(df)==0:
+        return {k:0.0 for k in CATS}, pd.DataFrame(), {"rows":0,"mapped":0,"low":0,"days":0,"factor":1.0}
+    work=df.copy()
+    records=[]
+    for _,row in work.iterrows():
+        amount=float(row.get("amount",0) or 0)
+        # Plaid uses positive amounts for outflows. Ignore zero/negative here; refunds/payments
+        # should be reviewed rather than silently treated as purchases.
+        if amount<=0: continue
+        cat,confidence,reason=classify_transaction(
+            row.get("primary",""),row.get("detailed",""),row.get("merchant",""),
+            row.get("mcc",""),row.get("plaid_confidence","")
+        )
+        if cat is None: continue
+        records.append({
+            "Date":row.get("date"),
+            "Merchant":row.get("merchant",""),
+            "Amount":amount,
+            "CardOpt category":CATS[cat],
+            "Category key":cat,
+            "Confidence":confidence,
+            "Reason":reason,
+        })
+    mapped=pd.DataFrame(records)
+    spend={k:0.0 for k in CATS}
+    if len(mapped):
+        for key,val in mapped.groupby("Category key")["Amount"].sum().items():
+            if key in spend: spend[key]=float(val)
+    dates=pd.to_datetime(work.get("date"),errors="coerce") if "date" in work else pd.Series(dtype="datetime64[ns]")
+    valid_dates=dates.dropna()
+    days=0
+    if len(valid_dates)>=2:
+        days=max(1,(valid_dates.max()-valid_dates.min()).days+1)
+    factor=1.0
+    if annualize and 30<=days<330:
+        factor=365.0/days
+        spend={k:v*factor for k,v in spend.items()}
+    low=int((mapped["Confidence"]=="Low").sum()) if len(mapped) else 0
+    stats={"rows":len(work),"mapped":len(mapped),"low":low,"days":days,"factor":factor}
+    return spend,mapped,stats
+
+def solve(spend,cpp,bens,maxcards,horizon, allowed_cards=None, required_cards=None,
+          complexity_cost=0.0, switching_cost=0.0, existing_wallet=None, fee_overrides=None):
+    """
+    Mixed-integer linear program.
+
+    X[i,j] = reward-earning spend in category j on card i at category rate
+    Z[i,j] = post-cap spend in category j on card i at 1x
+    D[i,j] = spend covered by a modeled statement/travel credit; earns no rewards
+    Y[i]   = 1 when card i is carried, otherwise 0
+
+    Optional economics terms:
+      complexity_cost: user's annual friction value per additional card after the first
+      switching_cost: user's annualized friction value for each add/drop vs current wallet
     """
     names=list(DB); cats=list(CATS); n=len(names); m=len(cats); q=n*m; N=3*q+n
     allowed_cards=set(names if allowed_cards is None else allowed_cards)
     required_cards=set([] if required_cards is None else required_cards)
+    existing_wallet=set(existing_wallet or [])
+    fee_overrides=fee_overrides or {}
+
     c=np.zeros(N); ub=np.full(N,np.inf); integ=np.zeros(N)
     X=lambda i,j:i*m+j
     Z=lambda i,j:q+i*m+j
@@ -227,12 +529,19 @@ def solve(spend,cpp,bens,maxcards,horizon, allowed_cards=None, required_cards=No
             else:
                 c[D(i,j)]=-1.0
         ann=d["ann"]*cpp[nm]/100 if horizon=="Ongoing annual economics" else 0
-        c[Y(i)]=d["fee"]-bens[nm]-ann+1e-5
+        fee=float(fee_overrides.get(nm,d["fee"]))
+        # Complexity penalty on every selected card differs from "extra cards" only by
+        # a constant for any positive-spend feasible portfolio, so it preserves ranking.
+        choice_cost=float(complexity_cost)
+        if switching_cost:
+            # symmetric-difference cost up to an irrelevant constant:
+            # adding a new card is +cost; retaining an existing card avoids a drop cost.
+            choice_cost += (-switching_cost if nm in existing_wallet else switching_cost)
+        c[Y(i)]=fee-bens[nm]-ann+choice_cost+1e-5
         ub[Y(i)]=1 if nm in allowed_cards else 0
         integ[Y(i)]=1
 
     rows=[]; lo=[]; hi=[]
-    # Every dollar of category spend is assigned exactly once.
     for j,cat in enumerate(cats):
         r={}
         for i in range(n):
@@ -240,19 +549,16 @@ def solve(spend,cpp,bens,maxcards,horizon, allowed_cards=None, required_cards=No
         rows.append(r); lo.append(spend[cat]); hi.append(spend[cat])
 
     M=max(sum(spend.values()),1)
-    # No spend can flow to an unselected card.
     for i in range(n):
         r={Y(i):-M}
         for j in range(m):
             r[X(i,j)]=1; r[Z(i,j)]=1; r[D(i,j)]=1
         rows.append(r); lo.append(-np.inf); hi.append(0)
 
-    # Category bonus caps. Overflow goes to Z at 1x.
     for i,nm in enumerate(names):
         for cat,cap in DB[nm]["caps"].items():
             rows.append({X(i,cats.index(cat)):1,Y(i):-cap}); lo.append(-np.inf); hi.append(0)
 
-    # Statement/travel credit caps. D is eligible covered spend and earns no rewards.
     for i,nm in enumerate(names):
         credit=DB[nm].get("auto_credit")
         if credit:
@@ -269,6 +575,7 @@ def solve(spend,cpp,bens,maxcards,horizon, allowed_cards=None, required_cards=No
     A=lil_matrix((len(rows),N))
     for rr,dct in enumerate(rows):
         for col,val in dct.items(): A[rr,col]=val
+
     res=milp(c,integrality=integ,bounds=Bounds(np.zeros(N),ub),
              constraints=LinearConstraint(A.tocsr(),np.array(lo),np.array(hi)))
     if not res.success:return None
@@ -293,30 +600,163 @@ def solve(spend,cpp,bens,maxcards,horizon, allowed_cards=None, required_cards=No
                     cs[nm]+=amt
                     alloc.append([CATS[cat],nm,amt,rate,cpp[nm],val,tier])
 
-    fees=sum(DB[x]["fee"] for x in selected)
+    fees=sum(float(fee_overrides.get(x,DB[x]["fee"])) for x in selected)
     manual_ben=sum(bens[x] for x in selected)
     ann=sum(DB[x]["ann"]*cpp[x]/100 for x in selected) if horizon=="Ongoing annual economics" else 0
+
     details=[]
     for x in selected:
         av=DB[x]["ann"]*cpp[x]/100 if horizon=="Ongoing annual economics" else 0
         total_ben=bens[x]+cc[x]
+        fee=float(fee_overrides.get(x,DB[x]["fee"]))
         details.append({"Card":x,"Spend":cs[x],"Rewards":cg[x],"Benefits":total_ben,
-                        "Anniversary":av,"Fee":DB[x]["fee"],
-                        "Net":cg[x]+total_ben+av-DB[x]["fee"]})
+                        "Anniversary":av,"Fee":fee,
+                        "Net":cg[x]+total_ben+av-fee})
+
     total_ben=manual_ben+credit_value
+    economic_net=gross+total_ben+ann-fees
+    extra_cards=max(0,len(selected)-1)
+    changes=len(set(selected).symmetric_difference(existing_wallet)) if existing_wallet else len([x for x in selected if x not in existing_wallet])
+    complexity_penalty=float(complexity_cost)*extra_cards
+    switching_penalty=float(switching_cost)*changes
+    decision_utility=economic_net-complexity_penalty-switching_penalty
     return {"selected":selected,"allocation":alloc,"gross":gross,"fees":fees,
             "benefits":total_ben,"manual_benefits":manual_ben,"credits":credit_value,
-            "anniversary":ann,"net":gross+total_ben+ann-fees,"details":details}
+            "anniversary":ann,"net":economic_net,"details":details,
+            "complexity_penalty":complexity_penalty,"switching_penalty":switching_penalty,
+            "decision_utility":decision_utility,"changes":changes}
+
+def portfolio_frontier(spend,cpp,bens,horizon,allowed_cards,complexity_cost=0,switching_cost=0,existing_wallet=None):
+    rows=[]
+    prev=None
+    for k in range(1,len(DB)+1):
+        rr=solve(spend,cpp,bens,k,horizon,allowed_cards=allowed_cards,
+                 complexity_cost=complexity_cost,switching_cost=switching_cost,existing_wallet=existing_wallet)
+        if rr is None: continue
+        marginal=np.nan if prev is None else rr["decision_utility"]-prev
+        rows.append({
+            "Maximum cards":k,
+            "Economic net value":rr["net"],
+            "Decision utility":rr["decision_utility"],
+            "Marginal decision value":marginal,
+            "Optimal wallet":", ".join(rr["selected"])
+        })
+        prev=rr["decision_utility"]
+    return pd.DataFrame(rows)
+
+def marginal_card_value(base_result,spend,cpp,bens,maxcards,horizon,allowed_cards,
+                        complexity_cost=0,switching_cost=0,existing_wallet=None):
+    rows=[]
+    for card in base_result["selected"]:
+        alt_allowed=[x for x in allowed_cards if x!=card]
+        rr=solve(spend,cpp,bens,maxcards,horizon,allowed_cards=alt_allowed,
+                 complexity_cost=complexity_cost,switching_cost=switching_cost,existing_wallet=existing_wallet)
+        if rr is None: continue
+        rows.append({
+            "Card":card,
+            "Marginal decision value":base_result["decision_utility"]-rr["decision_utility"],
+            "Best wallet without card":", ".join(rr["selected"]),
+            "Economic value without card":rr["net"],
+        })
+    return pd.DataFrame(rows)
+
+def forced_alternative_analysis(base_result,spend,cpp,bens,maxcards,horizon,allowed_cards,
+                                complexity_cost=0,switching_cost=0,existing_wallet=None):
+    rows=[]
+    for card in allowed_cards:
+        if card in base_result["selected"]: continue
+        rr=solve(spend,cpp,bens,maxcards,horizon,allowed_cards=allowed_cards,required_cards=[card],
+                 complexity_cost=complexity_cost,switching_cost=switching_cost,existing_wallet=existing_wallet)
+        if rr is None: continue
+        rows.append({
+            "Card forced into wallet":card,
+            "Opportunity cost":base_result["decision_utility"]-rr["decision_utility"],
+            "Best wallet if forced":", ".join(rr["selected"]),
+            "Economic net value":rr["net"],
+        })
+    return pd.DataFrame(rows).sort_values("Opportunity cost") if rows else pd.DataFrame()
+
+def robustness_analysis(base_result,spend,cpp,bens,maxcards,horizon,allowed_cards,
+                        complexity_cost=0,switching_cost=0,existing_wallet=None):
+    scenarios=[]
+    base_set=tuple(sorted(base_result["selected"]))
+    def run(label, sspend, scpp, sbens):
+        rr=solve(sspend,scpp,sbens,maxcards,horizon,allowed_cards=allowed_cards,
+                 complexity_cost=complexity_cost,switching_cost=switching_cost,existing_wallet=existing_wallet)
+        if rr:
+            scenarios.append({
+                "Scenario":label,
+                "Decision utility":rr["decision_utility"],
+                "Economic net value":rr["net"],
+                "Wallet":", ".join(rr["selected"]),
+                "Same portfolio":tuple(sorted(rr["selected"]))==base_set
+            })
+    run("Base",dict(spend),dict(cpp),dict(bens))
+    for label,factor in [("Points -25%",.75),("Points +25%",1.25)]:
+        scpp={n:(cpp[n] if n in CASHLIKE else max(.5,cpp[n]*factor)) for n in DB}
+        run(label,dict(spend),scpp,dict(bens))
+    for label,factor in [("Benefits -30%",.70),("Benefits +20%",1.20)]:
+        sb={n:min(sum(x[1] for x in DB[n]["benefits"]),bens[n]*factor) for n in DB}
+        run(label,dict(spend),dict(cpp),sb)
+    for cat in CATS:
+        for sign,factor in [("down",.8),("up",1.2)]:
+            ss=dict(spend); ss[cat]=spend[cat]*factor
+            run(f"{CATS[cat]} {sign} 20%",ss,dict(cpp),dict(bens))
+    df=pd.DataFrame(scenarios)
+    score=float(df["Same portfolio"].mean()*100) if len(df) else 0.0
+    return score,df
+
+def fee_decision_boundaries(base_result,spend,cpp,bens,maxcards,horizon,allowed_cards,
+                            complexity_cost=0,switching_cost=0,existing_wallet=None):
+    rows=[]
+    selected=set(base_result["selected"])
+    for card in allowed_cards:
+        current=float(DB[card]["fee"])
+        if card in selected:
+            # Find the highest fee (up to +$2,000) where the card still remains selected.
+            low=current; high=current+2000
+            test=solve(spend,cpp,bens,maxcards,horizon,allowed_cards=allowed_cards,
+                       fee_overrides={card:high},complexity_cost=complexity_cost,
+                       switching_cost=switching_cost,existing_wallet=existing_wallet)
+            if test and card in test["selected"]:
+                rows.append({"Card":card,"Boundary":"Fee headroom", "Threshold":high,
+                             "Interpretation":f"Still selected even at {money(high)} annual fee in tested range."})
+                continue
+            for _ in range(10):
+                mid=(low+high)/2
+                rr=solve(spend,cpp,bens,maxcards,horizon,allowed_cards=allowed_cards,
+                         fee_overrides={card:mid},complexity_cost=complexity_cost,
+                         switching_cost=switching_cost,existing_wallet=existing_wallet)
+                if rr and card in rr["selected"]: low=mid
+                else: high=mid
+            rows.append({"Card":card,"Boundary":"Approx. max annual fee", "Threshold":low,
+                         "Interpretation":f"Above roughly {money(low)}, another modeled wallet becomes preferable."})
+        elif current>0:
+            rr0=solve(spend,cpp,bens,maxcards,horizon,allowed_cards=allowed_cards,
+                      fee_overrides={card:0},complexity_cost=complexity_cost,
+                      switching_cost=switching_cost,existing_wallet=existing_wallet)
+            if rr0 and card in rr0["selected"]:
+                low=0; high=current
+                for _ in range(10):
+                    mid=(low+high)/2
+                    rr=solve(spend,cpp,bens,maxcards,horizon,allowed_cards=allowed_cards,
+                             fee_overrides={card:mid},complexity_cost=complexity_cost,
+                             switching_cost=switching_cost,existing_wallet=existing_wallet)
+                    if rr and card in rr["selected"]: low=mid
+                    else: high=mid
+                rows.append({"Card":card,"Boundary":"Approx. entry fee", "Threshold":low,
+                             "Interpretation":f"At about {money(low)} annual fee or lower, this card enters the modeled optimum."})
+    return pd.DataFrame(rows)
 
 st.markdown("""<div class="hero61">
 <div class="brand">Card<span>Opt</span></div>
-<div class="eyebrow">Smarter spending. Clearer decisions.</div>
-<h1>Optimize your wallet.<br><span>Maximize your value.</span></h1>
-<p>CardOpt uses mathematical optimization to find the credit card combination that best fits your spending and the value you place on card benefits.</p>
+<div class="eyebrow">Explainable credit-card decision intelligence</div>
+<h1>Optimize your wallet.<br><span>Understand every tradeoff.</span></h1>
+<p>CardOpt combines real or self-reported spending, mixed-integer optimization, and decision economics to find a high-value wallet and explain why the answer changes.</p>
 <div class="stats">
-<div class="stat"><b>6 cards</b><small>carefully modeled</small></div>
-<div class="stat"><b>8 spending categories</b><small>optimized together</small></div>
-<div class="stat"><b>Thousands</b><small>of possible allocations</small></div>
+<div class="stat"><b>6 verified cards</b><small>official issuer sources</small></div>
+<div class="stat"><b>Real-spend ready</b><small>manual, CSV, or Plaid</small></div>
+<div class="stat"><b>Decision economics</b><small>marginal value + opportunity cost</small></div>
 </div>
 <div class="orbit">
 <div class="cardshape c1">SAPPHIRE RESERVE</div>
@@ -406,7 +846,7 @@ if st.session_state.experience is None:
           <div class="learn-step"><div class="num">3</div><b>Build your wallet</b><span>Turn what you learned into a simple wallet strategy.</span></div>
         </div>""",unsafe_allow_html=True)
 
-        basics,rewards,wallet=st.tabs(["Credit Card Basics","Rewards 101","Build Your Wallet"])
+        basics,rewards,economics,wallet=st.tabs(["Credit Card Basics","Rewards 101","Decision Economics","Build Your Wallet"])
 
         with basics:
             st.markdown("## Start with the fundamentals")
@@ -432,6 +872,20 @@ if st.session_state.experience is None:
             </div>""",unsafe_allow_html=True)
             st.markdown("""<div class="learn-example"><b>Why 4X is not automatically better than 3%</b><br><br>
             On $10,000 of dining, 4X points valued at 1.5 cents each produces $600 of modeled reward value. Subtract a $325 annual fee and the result is $275 before other benefits. A no-fee 3% card produces $300. CardOpt evaluates the economics, not just the biggest multiplier.</div>""",unsafe_allow_html=True)
+
+        with economics:
+            st.markdown("## Decision economics, not just rewards")
+            st.write("CardOpt treats a wallet as an economic choice under constraints. These concepts explain why the highest headline reward rate is not always the best decision.")
+            st.markdown("""<div class="lesson-grid">
+              <div class="lesson"><div class="lesson-icon">Δ</div><h3>Marginal value</h3><p>How much better is the best portfolio with a card than the best portfolio without it? This measures what that card actually adds at the margin.</p></div>
+              <div class="lesson"><div class="lesson-icon">↔</div><h3>Opportunity cost</h3><p>If you insist on a different card, what value do you give up versus the modeled optimum? CardOpt can force that choice and re-optimize everything else.</p></div>
+              <div class="lesson"><div class="lesson-icon">≈</div><h3>Break-even boundary</h3><p>At what annual fee or other assumption does a card enter or leave the optimal portfolio? The answer is a decision boundary, not a universal ranking.</p></div>
+              <div class="lesson"><div class="lesson-icon">↓</div><h3>Diminishing returns</h3><p>The second card may add substantial value while the fourth adds almost nothing. CardOpt's wallet frontier shows the incremental gain from allowing more complexity.</p></div>
+              <div class="lesson"><div class="lesson-icon">⚖</div><h3>Utility and friction</h3><p>Two wallets can have similar dollar value but very different hassle. Advanced Mode can assign an explicit cost to extra cards and switching rather than pretending convenience is free.</p></div>
+              <div class="lesson"><div class="lesson-icon">?</div><h3>Uncertainty</h3><p>Point values and future spending are uncertain. A recommendation is stronger when it survives reasonable changes in those assumptions.</p></div>
+            </div>""",unsafe_allow_html=True)
+            st.markdown("""<div class="learn-example"><b>Example: is a third card worth carrying?</b><br><br>
+            If a one-card wallet is worth $610, two cards are worth $681, and three cards are worth $696, the third card adds only $15. The mathematical maximum is three cards, but the economic question is whether $15 is worth the extra complexity to you.</div>""",unsafe_allow_html=True)
 
         with wallet:
             st.markdown("## Build Your Wallet")
@@ -482,6 +936,15 @@ if st.session_state.experience is None:
         st.latex(r"\max \left[\sum_{i,j} r_{ij}v_i x_{ij}+\sum_{i,j} v_i z_{ij}+\sum_{i,j} d_{ij}+\sum_i b_i y_i+\sum_i a_i y_i-\sum_i f_i y_i\right]")
         st.write("Here **rᵢⱼ** is the reward multiplier, **vᵢ** is cents-per-point converted to dollars, **bᵢ** is user-valued recurring benefit value, **aᵢ** is applicable anniversary value, and **fᵢ** is the annual fee.")
 
+        st.markdown("### 2A. Optional practical-utility layer")
+        st.write("Advanced Mode can add explicit user-defined friction costs without mixing them into the issuer economics.")
+        st.latex(r"U = V - \lambda\left(\sum_i y_i-1\right) - \gamma(A+D)")
+        st.write("**V** is core economic net value, **λ** is the annual hassle value assigned to each additional card, and **γ** is the friction value assigned to each card added or removed relative to the current wallet. **A** and **D** count additions and drops. With positive spending, at least one card must be selected, so the complexity term remains linear up to an irrelevant constant.")
+
+        st.markdown("### 2B. Real-spending data layer")
+        st.write("Manual inputs can be replaced by transaction-derived category totals. Plaid or CSV records are classified into CardOpt categories using available personal-finance categories, merchant category codes, merchant names, and confidence labels. The user can review and override category totals before they enter the optimization model.")
+        st.latex(r"\text{transactions} \rightarrow \text{classification} \rightarrow S_j \rightarrow \text{MILP}")
+
         st.markdown("### 3. Core constraints")
         st.write("**Spend conservation**: every modeled dollar must be assigned exactly once.")
         st.latex(r"\sum_i (x_{ij}+z_{ij}+d_{ij}) = S_j \quad \forall j")
@@ -508,6 +971,13 @@ if st.session_state.experience is None:
         st.markdown('<div class="pagehero"><div class="eyebrow">Research</div><h1>Transparent by design.</h1><p>The optimization is useful only if its assumptions, constraints and data can be inspected.</p></div>',unsafe_allow_html=True)
         st.markdown("""<div class="premium-strip"><div class="premium-pill"><b>Issuer facts</b><span>Rates and fees sourced from official issuer materials.</span></div><div class="premium-pill"><b>Visible assumptions</b><span>Point values and user benefit values are never disguised as issuer facts.</span></div><div class="premium-pill"><b>Reproducible model</b><span>Objective, variables and constraints are documented in Math & Model.</span></div></div>""",unsafe_allow_html=True)
         st.markdown("""<div class="research-card"><h3>Optimization model</h3><p>CardOpt uses mixed-integer linear programming. Binary variables represent whether a card is selected. Continuous variables represent category-level spending allocated to each card.</p></div>""",unsafe_allow_html=True)
+        st.markdown("""<div class="insight-grid">
+        <div class="insight-card"><div class="kicker">Real behavior</div><div class="big">Manual + CSV + Plaid</div><p>Users can optimize estimates or transaction-derived spending, then review category mapping before it reaches the model.</p></div>
+        <div class="insight-card"><div class="kicker">Decision economics</div><div class="big">Beyond rewards</div><p>Marginal value, opportunity cost, diminishing returns, decision boundaries, and explicit convenience frictions explain the recommendation.</p></div>
+        <div class="insight-card"><div class="kicker">Uncertainty</div><div class="big">Robustness tested</div><p>CardOpt asks whether the same wallet survives changes in point values, benefit use, and category spending.</p></div>
+        </div>""",unsafe_allow_html=True)
+        st.markdown("""<div class="research-card"><h3>Data freshness architecture</h3><p>Card terms are versioned by review date and tied to official issuer sources. Automated source monitoring should flag possible term changes for human review rather than silently overwriting the live optimization database.</p></div>""",unsafe_allow_html=True)
+        st.caption("Plaid transaction integration uses Hosted Link and the Transactions product when deployment credentials are configured. CardOpt's classifier does not claim that a Plaid category is identical to an issuer's final merchant coding.")
         st.latex(r"\max\; \text{reward value} + \text{user-valued benefits} + \text{anniversary value} - \text{annual fees}")
         r1,r2=st.columns(2)
         with r1:
@@ -519,10 +989,10 @@ if st.session_state.experience is None:
         st.stop()
 
     if st.session_state.page == "About":
-        st.markdown('<div class="pagehero"><div class="eyebrow">About CardOpt</div><h1>What should actually be in your wallet?</h1><p>CardOpt is an independent quantitative finance and optimization project built to explore that question.</p></div>',unsafe_allow_html=True)
+        st.markdown('<div class="pagehero"><div class="eyebrow">About CardOpt</div><h1>What should actually be in your wallet?</h1><p>CardOpt is an explainable credit-card decision engine combining portfolio optimization, real-spending analysis, and economic tradeoff modeling.</p></div>',unsafe_allow_html=True)
         a1,a2=st.columns([1.25,1])
         with a1:
-            st.markdown("""<div class="research-card"><h3>Why CardOpt exists</h3><p>Comparing individual cards is relatively easy. Comparing a portfolio is harder because rewards, annual fees, spending caps, point values, benefits and overlapping categories interact. CardOpt models those interactions together.</p></div>""",unsafe_allow_html=True)
+            st.markdown("""<div class="research-card"><h3>Why CardOpt exists</h3><p>Comparing individual rewards is relatively easy. The harder problem is deciding which cards belong in a wallet, how spending should be routed, what each additional card is actually worth, what convenience costs, and when the answer changes. CardOpt models those decisions together.</p></div>""",unsafe_allow_html=True)
             st.markdown("""<div class="research-card"><h3>Built by Sri Nihal Tammana</h3><p>CardOpt is an independent quantitative finance and optimization project exploring how mathematical modeling can make an everyday financial decision more transparent and easier to understand.</p></div>""",unsafe_allow_html=True)
         with a2:
             st.markdown('<div class="infoCard"><div class="eyebrow">Principles</div><h3>Useful, inspectable, honest.</h3><p>Keep the consumer experience simple. Expose the model for people who want depth. Separate issuer facts from assumptions. Validate the math with known-answer tests. Never treat restricted benefits as automatic cash value.</p></div>',unsafe_allow_html=True)
@@ -549,6 +1019,15 @@ if st.session_state.experience is None:
         if st.button("Open Advanced  →",use_container_width=True):
             st.session_state.experience="Advanced"; st.rerun()
     st.info("Not sure which to choose? You can switch between Simple and Advanced Mode at any time.")
+    st.markdown("""<div class="section61" style="padding-top:2rem">
+    <div class="eyebrow">Beyond a rewards calculator</div>
+    <h2>CardOpt explains the decision.</h2>
+    <p>It is designed to answer not only which wallet wins, but what each card adds, what you give up, and when the answer changes.</p></div>""",unsafe_allow_html=True)
+    st.markdown("""<div class="insight-grid">
+    <div class="insight-card"><div class="kicker">Real spending</div><div class="big">Manual, CSV, or Plaid</div><p>Start from estimates or transaction-derived behavior, then review the category mapping before optimization.</p></div>
+    <div class="insight-card"><div class="kicker">Economic tradeoffs</div><div class="big">Marginal value + opportunity cost</div><p>Measure what another card actually contributes and how much value is lost by forcing a different choice.</p></div>
+    <div class="insight-card"><div class="kicker">Uncertainty</div><div class="big">Robustness + boundaries</div><p>Stress point values and spending, then estimate where annual-fee changes would flip the optimal portfolio.</p></div>
+    </div>""",unsafe_allow_html=True)
     st.stop()
 
 with st.sidebar:
@@ -570,16 +1049,165 @@ with st.sidebar:
     st.caption("Ongoing includes applicable anniversary rewards. First-year recurring excludes rewards that begin after the first anniversary.")
 
 with st.container(border=True):
-    st.markdown('<div class="step-head"><div class="stepnum">2</div><div><b>Your analysis</b><span>Enter spending, benefit values and reward assumptions.</span></div></div>',unsafe_allow_html=True)
-    tabs=st.tabs(["Spending","Benefits","Reward assumptions","Methodology"])
+    st.markdown('<div class="step-head"><div class="stepnum">2</div><div><b>Your analysis</b><span>Build a spending profile, then choose the assumptions CardOpt should use.</span></div></div>',unsafe_allow_html=True)
+    tabs=st.tabs(["Spending data","Benefits","Reward assumptions","Economics","Methodology"])
 
     with tabs[0]:
-        st.subheader("Your annual spending")
-        st.markdown('<div class="note">Use a typical year. CardOpt will decide where each dollar should go.</div>',unsafe_allow_html=True)
-        spend={}; cols=st.columns(2)
-        for i,(k,label) in enumerate(CATS.items()):
-            with cols[i%2]: spend[k]=st.number_input(label,0.0,value=float(DEFAULT[k]),step=500.0,format="%.0f",key="s"+k)
-        st.markdown(f"""<div class="learn-example" style="margin-top:1rem"><span style="color:#647696;font-size:.9rem">TOTAL ANNUAL CARD SPENDING</span><br><strong style="font-size:2.25rem;color:#0b55d9">{money(sum(spend.values()))}</strong></div>""",unsafe_allow_html=True)
+        st.subheader("Build your spending profile")
+        st.markdown('<div class="data-source-banner"><b>Use estimates or real transactions.</b><span>Manual entry always remains available. Transaction imports are converted into CardOpt reward categories, then you can review and edit the totals before optimization.</span></div>',unsafe_allow_html=True)
+        source_mode=st.radio(
+            "Spending data source",
+            ["Enter manually","Upload transactions","Connect with Plaid (Beta)"],
+            horizontal=True,
+            key="spending_source_mode"
+        )
+
+        spend={k:0.0 for k in CATS}
+
+        if source_mode=="Enter manually":
+            cols=st.columns(2)
+            for i,(k,label) in enumerate(CATS.items()):
+                with cols[i%2]:
+                    spend[k]=st.number_input(label,0.0,value=float(DEFAULT[k]),step=500.0,format="%.0f",key="manual_"+k)
+            st.caption("Manual mode is private and requires no account connection.")
+
+        elif source_mode=="Upload transactions":
+            st.write("Upload a CSV exported from a bank, credit-card account, budgeting tool, or Plaid-style dataset.")
+            up=st.file_uploader("Transaction CSV",type=["csv"],key="transaction_csv")
+            sign=st.radio("How are purchases shown in the Amount column?",["Positive amounts","Negative amounts"],horizontal=True,key="csv_sign")
+            annualize_csv=st.checkbox("Annualize a partial-year history",value=True,key="csv_annualize",
+                                     help="If the file covers 30 to 329 days, CardOpt scales observed category spend to a 365-day estimate.")
+            if up is not None:
+                try:
+                    raw=pd.read_csv(up)
+                    normalized=csv_to_normalized_frame(raw,"positive" if sign=="Positive amounts" else "negative")
+                    profile,mapped,stats=build_spending_profile(normalized,annualize=annualize_csv)
+                    st.markdown(f"""<div class="insight-grid">
+                    <div class="insight-card"><div class="kicker">Transactions read</div><div class="big">{stats['rows']:,}</div><p>Rows found in the uploaded file.</p></div>
+                    <div class="insight-card"><div class="kicker">Mapped purchases</div><div class="big">{stats['mapped']:,}</div><p>Positive purchase-like transactions used in the profile.</p></div>
+                    <div class="insight-card"><div class="kicker">History window</div><div class="big">{stats['days'] or 'Unknown'} days</div><p>{'Annualized ×'+format(stats['factor'],'.2f') if stats['factor']!=1 else 'No annualization applied.'}</p></div>
+                    </div>""",unsafe_allow_html=True)
+                    if len(mapped):
+                        low_pct=100*stats["low"]/max(1,len(mapped))
+                        st.caption(f"Classification review: {stats['low']} low-confidence transactions ({low_pct:.1f}%). Merchant coding can differ from CardOpt's inferred reward category.")
+                        with st.expander("Review classified transactions"):
+                            preview=mapped.copy()
+                            preview["Amount"]=preview["Amount"].map(lambda x:f"${x:,.2f}")
+                            st.dataframe(preview[["Date","Merchant","Amount","CardOpt category","Confidence","Reason"]],use_container_width=True,hide_index=True)
+                    st.markdown("#### Review annual category totals")
+                    cols=st.columns(2)
+                    for i,(k,label) in enumerate(CATS.items()):
+                        with cols[i%2]:
+                            spend[k]=st.number_input(label,0.0,value=float(round(profile[k],2)),step=100.0,format="%.0f",key="csv_"+k)
+                except Exception as e:
+                    st.error(f"Could not read that CSV: {e}")
+            else:
+                st.info("Upload a CSV to create a spending profile. You can switch to Manual at any time.")
+
+        else:
+            st.markdown("""<div class="plaid-box"><strong>Plaid connection</strong><br>
+            CardOpt can use Plaid Hosted Link to let you authorize transaction access without entering bank credentials into CardOpt. The connection is optional and Manual/CSV modes remain available.</div>""",unsafe_allow_html=True)
+
+            if "plaid_user_id" not in st.session_state:
+                st.session_state.plaid_user_id="cardopt_"+secrets.token_hex(8)
+            if "plaid_access_tokens" not in st.session_state:
+                st.session_state.plaid_access_tokens=[]
+            if "plaid_cursors" not in st.session_state:
+                st.session_state.plaid_cursors={}
+            if "plaid_transactions" not in st.session_state:
+                st.session_state.plaid_transactions={}
+
+            if not plaid_is_configured():
+                st.warning("Plaid is not configured on this deployment yet. Add PLAID_CLIENT_ID and PLAID_SECRET to Streamlit Secrets to activate it.")
+                st.code("""# .streamlit/secrets.toml
+PLAID_CLIENT_ID = "..."
+PLAID_SECRET = "..."
+PLAID_ENV = "sandbox"   # change to production after approval
+CARDOPT_APP_URL = "https://your-app.streamlit.app"
+# Optional for production OAuth institutions:
+PLAID_REDIRECT_URI = "https://your-approved-redirect.example.com"
+""",language="toml")
+                st.caption("For development, Plaid Sandbox uses mock data. Production uses real financial data and requires the appropriate Plaid access and configuration.")
+            else:
+                pc1,pc2=st.columns(2)
+                with pc1:
+                    if st.button("Create secure Plaid connection",use_container_width=True,key="plaid_create"):
+                        try:
+                            link=create_plaid_hosted_link(st.session_state.plaid_user_id)
+                            st.session_state.plaid_link_token=link["link_token"]
+                            st.session_state.plaid_hosted_url=link.get("hosted_link_url")
+                        except Exception as e:
+                            st.error(f"Plaid connection could not be created: {e}")
+                with pc2:
+                    if st.session_state.get("plaid_access_tokens"):
+                        st.success(f"{len(st.session_state.plaid_access_tokens)} institution connection(s) active in this session.")
+
+                if st.session_state.get("plaid_hosted_url"):
+                    st.link_button("Open Plaid to connect an account",st.session_state.plaid_hosted_url,use_container_width=True)
+                    st.caption("Complete the Plaid flow, return to CardOpt, then import the connection below.")
+                    if st.button("I finished connecting. Import transactions",type="primary",use_container_width=True,key="plaid_finish"):
+                        try:
+                            tokens=get_public_tokens_from_link(st.session_state.plaid_link_token)
+                            if not tokens:
+                                st.info("Plaid has not reported a completed connection yet. Finish Link, then try again.")
+                            else:
+                                for pt in tokens:
+                                    at,item_id=exchange_public_token(pt)
+                                    if at not in st.session_state.plaid_access_tokens:
+                                        st.session_state.plaid_access_tokens.append(at)
+                                st.success("Connection authorized. Importing available transaction history.")
+                        except Exception as e:
+                            st.error(f"Could not finish Plaid connection: {e}")
+
+                if st.session_state.get("plaid_access_tokens"):
+                    if st.button("Refresh connected transactions",use_container_width=True,key="plaid_refresh"):
+                        try:
+                            for idx,at in enumerate(st.session_state.plaid_access_tokens):
+                                cursor=st.session_state.plaid_cursors.get(str(idx))
+                                added,modified,removed,next_cursor=sync_plaid_transactions(at,cursor)
+                                for t in added+modified:
+                                    if t.get("transaction_id"):
+                                        st.session_state.plaid_transactions[t["transaction_id"]]=t
+                                for rem in removed:
+                                    rid=rem.get("transaction_id")
+                                    if rid: st.session_state.plaid_transactions.pop(rid,None)
+                                st.session_state.plaid_cursors[str(idx)]=next_cursor
+                            if st.session_state.plaid_transactions:
+                                st.success(f"Loaded {len(st.session_state.plaid_transactions):,} transaction records into this session.")
+                            else:
+                                st.info("Plaid has not returned historical transactions yet. Transaction history can become available after the institution finishes preparing it; use Refresh again later.")
+                        except Exception as e:
+                            st.error(f"Could not refresh Plaid transactions: {e}")
+
+                    plaid_df=plaid_transactions_to_frame(list(st.session_state.plaid_transactions.values()))
+                    annualize_plaid=st.checkbox("Annualize partial Plaid history",value=True,key="plaid_annualize")
+                    profile,mapped,stats=build_spending_profile(plaid_df,annualize=annualize_plaid)
+                    if len(mapped):
+                        st.markdown(f"""<div class="insight-grid">
+                        <div class="insight-card"><div class="kicker">Connected purchases</div><div class="big">{stats['mapped']:,}</div><p>Purchase-like transactions currently analyzed.</p></div>
+                        <div class="insight-card"><div class="kicker">History window</div><div class="big">{stats['days'] or 'Unknown'} days</div><p>{'Annualized ×'+format(stats['factor'],'.2f') if stats['factor']!=1 else 'Observed totals used directly.'}</p></div>
+                        <div class="insight-card"><div class="kicker">Low confidence</div><div class="big">{stats['low']:,}</div><p>Transactions worth reviewing before relying on category routing.</p></div>
+                        </div>""",unsafe_allow_html=True)
+                        with st.expander("Review Plaid classification"):
+                            preview=mapped.copy(); preview["Amount"]=preview["Amount"].map(lambda x:f"${x:,.2f}")
+                            st.dataframe(preview[["Date","Merchant","Amount","CardOpt category","Confidence","Reason"]],use_container_width=True,hide_index=True)
+                    st.markdown("#### Review annual category totals")
+                    cols=st.columns(2)
+                    for i,(k,label) in enumerate(CATS.items()):
+                        with cols[i%2]:
+                            spend[k]=st.number_input(label,0.0,value=float(round(profile[k],2)),step=100.0,format="%.0f",key="plaid_"+k)
+
+                    if st.button("Disconnect Plaid data from this session",key="plaid_disconnect"):
+                        st.session_state.plaid_access_tokens=[]
+                        st.session_state.plaid_cursors={}
+                        st.session_state.plaid_transactions={}
+                        st.session_state.pop("plaid_hosted_url",None)
+                        st.session_state.pop("plaid_link_token",None)
+                        st.rerun()
+
+            st.caption("Privacy note: this prototype keeps Plaid access tokens only in the active Streamlit server session and does not intentionally write them to disk. A production service should use encrypted persistent token storage, deletion controls, webhook handling, and formal security review.")
+
+        st.markdown(f"""<div class="learn-example" style="margin-top:1rem"><span style="color:#647696;font-size:.9rem">ANNUAL SPENDING USED BY THE MODEL</span><br><strong style="font-size:2.25rem;color:#0b55d9">{money(sum(spend.values()))}</strong></div>""",unsafe_allow_html=True)
 
     bens={}
     with tabs[1]:
@@ -588,7 +1216,7 @@ with st.container(border=True):
         for nm,d in DB.items():
             with st.expander(nm,expanded=(nm=="Capital One Venture X")):
                 total=0
-                if not d["benefits"]: st.caption("No recurring credit explicitly modeled.")
+                if not d["benefits"]: st.caption("No recurring lifestyle credit explicitly modeled here.")
                 for bn,face,note in d["benefits"]:
                     val=st.slider(f"{bn} · up to {money(face)}",0,int(face),0,5,key=nm+bn)
                     st.caption(note); total+=val
@@ -600,24 +1228,49 @@ with st.container(border=True):
     with tabs[2]:
         st.subheader("Reward-value assumptions")
         st.markdown('<div class="note">Transferable points do not have one guaranteed cash value. CardOpt makes that judgment visible instead of hiding it.</div>',unsafe_allow_html=True)
-        for nm,d in DB.items(): cpp[nm]=st.number_input(f"{nm} · cents per point",.50,3.00,float(d["cpp"]),.05,key="c"+nm)
-        st.info("Cash-like cards default to 1.00¢. Transferable currencies default to 1.50¢ as an analyst assumption, not an issuer guarantee.")
+        for nm,d in DB.items():
+            cpp[nm]=st.number_input(f"{nm} · cents per point",.50,3.00,float(d["cpp"]),.05,key="c"+nm)
+        st.info("Cash-like cards default to 1.00¢. Transferable currencies default to 1.50¢ as a model assumption, not an issuer guarantee.")
 
     with tabs[3]:
+        st.subheader("Decision economics")
+        st.markdown('<div class="data-source-banner"><b>Optimize value, not just rewards.</b><span>Advanced users can assign a small dollar cost to wallet complexity and switching. CardOpt then maximizes a practical decision-utility score while still reporting the underlying card economics separately.</span></div>',unsafe_allow_html=True)
+        if mode=="Advanced":
+            ec1,ec2=st.columns(2)
+            with ec1:
+                complexity_cost=st.number_input("Annual hassle cost per additional card",0.0,500.0,0.0,5.0,
+                    help="A subjective dollar value for carrying/managing each card after the first.")
+            with ec2:
+                switching_cost=st.number_input("Friction cost per card added or removed",0.0,500.0,0.0,5.0,
+                    help="A subjective annualized cost for changing your current wallet.")
+            macro_spend_shock=st.slider("Broad nominal spending scenario for stress testing (%)",-20,20,0,1,
+                help="Used only in Advanced stress analysis. This is not an inflation forecast.")
+        else:
+            complexity_cost=0.0; switching_cost=0.0; macro_spend_shock=0
+            st.info("Simple Mode keeps these frictions at $0 so the recommendation stays easy to interpret. Advanced Mode lets you price convenience and switching.")
+        st.markdown("""<div class="insight-grid">
+        <div class="insight-card"><div class="kicker">Opportunity cost</div><div class="big">What you give up</div><p>Compare the optimal portfolio with the best portfolio forced to include another card.</p></div>
+        <div class="insight-card"><div class="kicker">Marginal value</div><div class="big">What one card adds</div><p>Remove one selected card and re-optimize the rest of the wallet.</p></div>
+        <div class="insight-card"><div class="kicker">Decision boundary</div><div class="big">When the answer flips</div><p>Estimate the annual-fee level at which a card enters or leaves the optimum.</p></div>
+        </div>""",unsafe_allow_html=True)
+
+    with tabs[4]:
         st.subheader("How CardOpt works")
         st.caption("For the full mathematical formulation, return to the welcome screen and open Math & Model.")
         st.write("CardOpt uses mixed-integer linear programming. Binary variables decide which cards enter the wallet; continuous variables decide how much spending in each category goes to each selected card.")
-        st.markdown("**Objective** · Maximize estimated recurring economic value: reward value + user-valued recurring benefits + applicable anniversary value − annual fees.")
-        st.markdown("**Constraints** · Allocate every dollar, route spend only to selected cards, enforce modeled category caps, and respect the user's maximum wallet size.")
+        st.markdown("**Core objective** · Maximize recurring economic value: reward value + user-valued recurring benefits + applicable anniversary value − annual fees.")
+        st.markdown("**Optional decision-economics layer** · In Advanced Mode, user-defined complexity and switching costs can be added to the optimization objective without being confused with issuer economics.")
+        st.markdown("**Constraints** · Allocate every dollar, route spend only to selected cards, enforce modeled category caps, credit eligibility, and maximum wallet size.")
+        st.markdown("**Real-spend layer** · CSV and Plaid transactions are mapped into CardOpt reward categories using Plaid PFC/MCC fields and merchant heuristics. Users can review/edit the resulting category totals.")
         st.markdown("**Benchmark** · Compare the optimized wallet with putting the same spending on a simple cash-back card.")
-        st.markdown("**Sensitivity** · Stress transferable-point values and benefit utilization while keeping cash-like values anchored.")
         st.subheader("Validation record")
-        st.write("Known-answer tests have covered basic cash-back arithmetic, annual-fee tradeoffs, multi-card routing, category caps and post-cap overflow, user-valued benefits, and first-year versus ongoing anniversary treatment.")
+        st.write("Known-answer tests cover cash-back arithmetic, annual-fee tradeoffs, multi-card routing, category caps and post-cap overflow, travel-credit treatment, benefit valuation, first-year versus ongoing anniversary treatment, and decision-economics penalties.")
         st.subheader("Scope")
-        st.write("Welcome offers, APR/interest, approval odds, credit-score effects, taxes, merchant-coding uncertainty, transfer-partner award availability, and unpriced qualitative perks are intentionally excluded from the recurring optimization.")
+        st.write("Welcome offers, APR/interest, approval odds, credit-score effects, taxes, exact issuer merchant coding, transfer-partner award availability, and unpriced qualitative perks are intentionally excluded from the recurring optimization.")
         st.subheader("Official issuer sources")
-        st.caption(f"Prototype terms reviewed {VERIFIED}. Terms can change.")
-        for nm,d in DB.items(): st.markdown(f'<div class="source"><b>{nm}</b><br><a href="{d["source"]}" target="_blank">Official issuer page ↗</a></div>',unsafe_allow_html=True)
+        st.caption(f"Card terms reviewed {VERIFIED}. Terms can change.")
+        for nm,d in DB.items():
+            st.markdown(f'<div class="source"><b>{nm}</b><br><a href="{d["source"]}" target="_blank">Official issuer page ↗</a></div>',unsafe_allow_html=True)
 
 with st.container(border=True):
     st.markdown('<div class="step-head"><div class="stepnum">3</div><div><b>Make it yours</b><span>Choose how you actually want to use credit cards.</span></div></div>',unsafe_allow_html=True)
@@ -674,7 +1327,8 @@ with st.container(border=True):
 if run_optimizer:
     total=sum(effective_spend.values())
     if total<=0: st.error("Enter at least some annual spending."); st.stop()
-    r=solve(effective_spend,effective_cpp,bens,maxcards,horizon,allowed_cards=allowed_cards)
+    r=solve(effective_spend,effective_cpp,bens,maxcards,horizon,allowed_cards=allowed_cards,
+            complexity_cost=complexity_cost,switching_cost=switching_cost,existing_wallet=existing_wallet)
     if r is None:
         st.error("No feasible wallet matches those preferences. Try relaxing a filter.")
         st.stop()
@@ -683,21 +1337,35 @@ if run_optimizer:
 
     if existing_wallet:
         current_allowed=[n for n in existing_wallet if n in DB]
-        current=solve(effective_spend,effective_cpp,bens,len(current_allowed),horizon,
-                      allowed_cards=current_allowed,required_cards=current_allowed)
+        current=solve(
+            effective_spend,effective_cpp,bens,len(current_allowed),horizon,
+            allowed_cards=current_allowed,required_cards=current_allowed,
+            complexity_cost=complexity_cost,switching_cost=switching_cost,existing_wallet=current_allowed
+        )
         if current is not None:
-            improvement=r["net"]-current["net"]
+            economic_improvement=r["net"]-current["net"]
+            decision_improvement=r["decision_utility"]-current["decision_utility"]
             st.subheader("CardOpt Compare")
             ca,cb,cc=st.columns(3)
             ca.metric("Your current wallet",money(current["net"]))
-            cb.metric("CardOpt optimized",money(r["net"]))
-            cc.metric("Potential improvement",("+" if improvement>=0 else "")+money(improvement))
-            if improvement>1:
-                st.success("Under your assumptions, CardOpt estimates about "+money(improvement)+" more annual value than your current wallet.")
-            elif improvement>=-1:
-                st.info("Your current wallet is already very close to CardOpt's optimized result.")
+            cb.metric("CardOpt economic value",money(r["net"]))
+            if complexity_cost or switching_cost:
+                cc.metric("Decision advantage",("+" if decision_improvement>=0 else "")+money(decision_improvement))
+                st.caption(f"Raw economic-value difference: {('+' if economic_improvement>=0 else '')+money(economic_improvement)}. Decision advantage also reflects the convenience and switching costs you chose.")
+                if decision_improvement>1:
+                    st.success("After the friction values you entered, CardOpt still prefers the optimized portfolio.")
+                elif decision_improvement>=-1:
+                    st.info("Your current wallet and the optimized portfolio are effectively tied after your friction assumptions.")
+                else:
+                    st.info("Your current wallet has the higher practical decision utility under the friction assumptions you entered.")
             else:
-                st.info("Your current wallet performs strongly under these assumptions.")
+                cc.metric("Potential improvement",("+" if economic_improvement>=0 else "")+money(economic_improvement))
+                if economic_improvement>1:
+                    st.success("Under your assumptions, CardOpt estimates about "+money(economic_improvement)+" more annual value than your current wallet.")
+                elif economic_improvement>=-1:
+                    st.info("Your current wallet is already very close to CardOpt's optimized result.")
+                else:
+                    st.info("Your current wallet performs strongly under these assumptions.")
 
     st.divider()
     if mode=="Simple":
@@ -721,25 +1389,45 @@ if run_optimizer:
         with st.expander("Why not another card?"):
             omitted=[n for n in allowed_cards if n not in r["selected"]]
             if omitted:
-                st.write("These cards were eligible but did not improve the highest-value modeled portfolio under your current assumptions:")
-                for n in omitted:
-                    st.write("• **"+n+"**")
+                st.write("CardOpt can test this as an opportunity-cost question: what happens if an omitted card is forced into the wallet?")
+                simple_alt=forced_alternative_analysis(
+                    r,effective_spend,effective_cpp,bens,maxcards,horizon,allowed_cards,
+                    complexity_cost,switching_cost,existing_wallet
+                )
+                if len(simple_alt):
+                    for _,row in simple_alt.iterrows():
+                        st.write(f"• **{row['Card forced into wallet']}**: forcing it into the portfolio reduces modeled decision value by about **{money(row['Opportunity cost'])}** versus the optimum.")
+                else:
+                    for n in omitted:
+                        st.write("• **"+n+"** did not improve the modeled optimum.")
             else:
                 st.write("All eligible modeled cards are in the optimized wallet.")
         st.info("For the assumptions, stress tests, allocation details and model diagnostics, switch to Advanced in the sidebar and run the same inputs.")
     else:
-        st.header("Advanced analysis")
-        m=st.columns(4)
-        m[0].metric("Estimated net value",money(r["net"]))
-        m[1].metric("Net-value rate",f"{r['net']/total*100:.2f}%")
-        m[2].metric(f"{benchmark*100:.1f}% benchmark",money(base))
-        m[3].metric("Modeled advantage",f"{'+' if adv>=0 else ''}{money(adv)}")
-        st.caption("Net-value rate includes modeled benefits and fees. It is not an issuer-advertised reward rate.")
+        st.header("Advanced decision analysis")
+        if complexity_cost or switching_cost:
+            m=st.columns(4)
+            m[0].metric("Economic net value",money(r["net"]))
+            m[1].metric("Decision utility",money(r["decision_utility"]))
+            m[2].metric(f"{benchmark*100:.1f}% benchmark",money(base))
+            m[3].metric("Economic advantage",f"{'+' if adv>=0 else ''}{money(adv)}")
+            st.caption("Decision utility = card economics minus the convenience/switching costs you explicitly chose. It is a preference score, not an issuer reward value.")
+        else:
+            m=st.columns(4)
+            m[0].metric("Estimated net value",money(r["net"]))
+            m[1].metric("Net-value rate",f"{r['net']/total*100:.2f}%")
+            m[2].metric(f"{benchmark*100:.1f}% benchmark",money(base))
+            m[3].metric("Modeled advantage",f"{'+' if adv>=0 else ''}{money(adv)}")
+            st.caption("Net-value rate includes modeled benefits and fees. It is not an issuer-advertised reward rate.")
+
+        st.markdown("""<div class="decision-banner"><h3>CardOpt Decision Engine</h3>
+        <p>The optimizer is only the first layer. The analysis below asks what each card adds at the margin, what you give up by forcing a different card, how much value another card creates, and whether the recommendation survives changes in assumptions.</p></div>""",unsafe_allow_html=True)
 
         st.subheader("Portfolio economics")
         ddf=pd.DataFrame(r["details"])
         display=ddf.copy()
-        for col in ["Spend","Rewards","Benefits","Anniversary","Fee","Net"]: display[col]=display[col].map(money)
+        for col in ["Spend","Rewards","Benefits","Anniversary","Fee","Net"]:
+            display[col]=display[col].map(money)
         st.dataframe(display,use_container_width=True,hide_index=True)
 
         df=pd.DataFrame(r["allocation"],columns=["Spending category","Card","Annual spend","Multiplier","Point value (¢)","Estimated reward value","Rate tier"])
@@ -747,53 +1435,139 @@ if run_optimizer:
         st.dataframe(df,use_container_width=True,hide_index=True)
 
         st.subheader("Economic bridge")
-        bridge=pd.DataFrame({"Component":["Reward value","User-valued benefits","Anniversary value","Annual fees","Net value"],
-                             "Value":[r["gross"],r["benefits"],r["anniversary"],-r["fees"],r["net"]]})
+        bridge=pd.DataFrame({
+            "Component":["Reward value","Modeled benefits / credits","Anniversary value","Annual fees","Economic net value"],
+            "Value":[r["gross"],r["benefits"],r["anniversary"],-r["fees"],r["net"]]
+        })
+        if complexity_cost or switching_cost:
+            bridge=pd.concat([bridge,pd.DataFrame({
+                "Component":["Complexity friction","Switching friction","Decision utility"],
+                "Value":[-r["complexity_penalty"],-r["switching_penalty"],r["decision_utility"]]
+            })],ignore_index=True)
         st.dataframe(bridge.assign(Value=bridge["Value"].map(money)),use_container_width=True,hide_index=True)
         st.bar_chart(bridge.set_index("Component")["Value"],horizontal=True)
 
-        st.subheader("Robustness")
-        st.caption("Transferable-point values are stressed; cash-like reward values stay anchored.")
-        rows=[]
-        for label,pf,bf in [("Conservative",.75,.70),("Base",1,1),("Upside",1.25,1)]:
-            scpp={n:(cpp[n] if n in CASHLIKE else max(.5,cpp[n]*pf)) for n in DB}
-            sb={n:min(sum(x[1] for x in DB[n]["benefits"]),bens[n]*bf) for n in DB}
-            rr=solve(spend,scpp,sb,maxcards,horizon)
-            rows.append([label,rr["net"],", ".join(rr["selected"])])
-        sdf=pd.DataFrame(rows,columns=["Scenario","Estimated net value","Optimal wallet"])
-        shown=sdf.copy(); shown["Estimated net value"]=shown["Estimated net value"].map(money)
-        st.dataframe(shown,use_container_width=True,hide_index=True)
-        st.line_chart(sdf.set_index("Scenario")["Estimated net value"])
+        st.subheader("Economics of your wallet")
+        marg=marginal_card_value(
+            r,effective_spend,effective_cpp,bens,maxcards,horizon,allowed_cards,
+            complexity_cost,switching_cost,existing_wallet
+        )
+        if len(marg):
+            st.markdown("#### Marginal value of each selected card")
+            st.caption("CardOpt removes one selected card, re-optimizes the remaining eligible cards, and measures what the original portfolio loses.")
+            shown=marg.copy()
+            shown["Marginal decision value"]=shown["Marginal decision value"].map(money)
+            shown["Economic value without card"]=shown["Economic value without card"].map(money)
+            st.dataframe(shown,use_container_width=True,hide_index=True)
+            weakest=marg.sort_values("Marginal decision value").iloc[0]
+            st.info(f"**Diminishing-return check:** {weakest['Card']} contributes about {money(weakest['Marginal decision value'])} of marginal decision value versus the best modeled wallet without it.")
 
-        st.subheader("Wallet complexity")
-        rows=[]; prev=None; flat=0
-        for k in range(1,7):
-            rr=solve(spend,cpp,bens,k,horizon); marginal=np.nan if prev is None else rr["net"]-prev
-            rows.append([k,rr["net"],marginal,", ".join(rr["selected"])])
-            flat=flat+1 if prev is not None and abs(marginal)<1 else 0; prev=rr["net"]
-            if flat>=2: break
-        kdf=pd.DataFrame(rows,columns=["Maximum cards","Net value","Marginal value","Optimal wallet"])
-        shown=kdf.copy(); shown["Net value"]=shown["Net value"].map(money); shown["Marginal value"]=shown["Marginal value"].map(lambda x:"to" if pd.isna(x) else money(x))
-        st.dataframe(shown,use_container_width=True,hide_index=True)
-        st.line_chart(kdf.set_index("Maximum cards")["Net value"])
+        alt=forced_alternative_analysis(
+            r,effective_spend,effective_cpp,bens,maxcards,horizon,allowed_cards,
+            complexity_cost,switching_cost,existing_wallet
+        )
+        if len(alt):
+            st.markdown("#### Opportunity cost: what if you insist on another card?")
+            st.caption("For each omitted card, CardOpt forces that card into the wallet and re-optimizes everything else. The loss versus the optimum is the modeled opportunity cost of that constraint.")
+            shown=alt.copy()
+            shown["Opportunity cost"]=shown["Opportunity cost"].map(money)
+            shown["Economic net value"]=shown["Economic net value"].map(money)
+            st.dataframe(shown,use_container_width=True,hide_index=True)
+
+        frontier=portfolio_frontier(
+            effective_spend,effective_cpp,bens,horizon,allowed_cards,
+            complexity_cost,switching_cost,existing_wallet
+        )
+        st.markdown("#### Wallet complexity frontier")
+        st.caption("This shows diminishing returns from allowing more cards. A larger wallet is not automatically better if another card adds very little incremental value.")
+        if len(frontier):
+            shown=frontier.copy()
+            shown["Economic net value"]=shown["Economic net value"].map(money)
+            shown["Decision utility"]=shown["Decision utility"].map(money)
+            shown["Marginal decision value"]=shown["Marginal decision value"].map(lambda x:"—" if pd.isna(x) else money(x))
+            st.dataframe(shown,use_container_width=True,hide_index=True)
+            st.line_chart(frontier.set_index("Maximum cards")["Decision utility"])
+
+        st.markdown("#### Decision boundaries")
+        boundaries=fee_decision_boundaries(
+            r,effective_spend,effective_cpp,bens,maxcards,horizon,allowed_cards,
+            complexity_cost,switching_cost,existing_wallet
+        )
+        if len(boundaries):
+            bshow=boundaries.copy()
+            bshow["Threshold"]=bshow["Threshold"].map(money)
+            st.dataframe(bshow,use_container_width=True,hide_index=True)
+            st.caption("These are model-specific thresholds, not issuer predictions. They answer: at approximately what annual fee does the optimal portfolio change, holding the other assumptions fixed?")
+        else:
+            st.caption("No meaningful annual-fee boundary was identified among the fee-bearing eligible cards under this scenario.")
+
+        st.subheader("Robustness: does the answer survive uncertainty?")
+        score,rdf=robustness_analysis(
+            r,effective_spend,effective_cpp,bens,maxcards,horizon,allowed_cards,
+            complexity_cost,switching_cost,existing_wallet
+        )
+        rc1,rc2,rc3=st.columns(3)
+        rc1.metric("Portfolio robustness",f"{score:.0f}%")
+        rc2.metric("Scenarios tested",str(len(rdf)))
+        if len(rdf):
+            most_common=rdf["Wallet"].value_counts().index[0]
+            rc3.metric("Most common wallet",most_common)
+        if score>=80:
+            st.success("This recommendation is relatively robust across the tested point-value, benefit, and category-spending changes.")
+        elif score>=50:
+            st.warning("This recommendation is moderately sensitive. Reasonable changes in assumptions can change the optimal wallet.")
+        else:
+            st.warning("This recommendation is highly sensitive. Treat the exact portfolio as scenario-dependent rather than a stable answer.")
+        if len(rdf):
+            shown=rdf.copy()
+            shown["Decision utility"]=shown["Decision utility"].map(money)
+            shown["Economic net value"]=shown["Economic net value"].map(money)
+            st.dataframe(shown,use_container_width=True,hide_index=True)
+
+        st.subheader("Macroeconomic lens")
+        st.caption("CardOpt's core problem is microeconomic. This optional layer asks how a broad nominal spending shift could change the portfolio. It is a scenario, not an inflation forecast.")
+        if macro_spend_shock==0:
+            st.info("Set a broad spending scenario in the Economics tab to test whether a price-level / nominal-spending shift changes the optimal wallet.")
+        else:
+            factor=1+macro_spend_shock/100
+            shocked={k:v*factor for k,v in effective_spend.items()}
+            mr=solve(shocked,effective_cpp,bens,maxcards,horizon,allowed_cards=allowed_cards,
+                     complexity_cost=complexity_cost,switching_cost=switching_cost,existing_wallet=existing_wallet)
+            if mr:
+                mc1,mc2,mc3=st.columns(3)
+                mc1.metric("Nominal spending scenario",f"{macro_spend_shock:+d}%")
+                mc2.metric("Scenario economic value",money(mr["net"]))
+                mc3.metric("Value change",f"{'+' if mr['net']-r['net']>=0 else ''}{money(mr['net']-r['net'])}")
+                st.write("Scenario wallet: **"+", ".join(mr["selected"])+"**")
+                if set(mr["selected"])==set(r["selected"]):
+                    st.caption("The selected portfolio remains unchanged under this broad nominal-spending scenario.")
+                else:
+                    st.caption("The portfolio changes because higher/lower nominal category spend alters the value of reward rates, caps, and fixed annual fees.")
 
         st.subheader("Assumption audit")
-        audit=pd.DataFrame([[n,f"{cpp[n]:.2f}¢",money(bens[n]),money(DB[n]["fee"])] for n in r["selected"]],
-                           columns=["Card","Point value assumption","Benefit value assumption","Annual fee"])
+        audit=pd.DataFrame(
+            [[n,f"{effective_cpp[n]:.2f}¢",money(bens[n]),money(DB[n]["fee"])] for n in r["selected"]],
+            columns=["Card","Point value assumption","User-valued restricted benefits","Annual fee"]
+        )
         st.dataframe(audit,use_container_width=True,hide_index=True)
 
-        summary=f"""CardOpt V6 analysis
-Annual spending: {money(total)}
+        summary=f"""CardOpt 2.0 Decision Analysis
+Annual spending used by model: {money(total)}
+Spending source: {source_mode}
 Horizon: {horizon}
 Recommended wallet: {", ".join(r["selected"])}
-Estimated net annual value: {money(r["net"])}
+Economic net annual value: {money(r["net"])}
+Decision utility: {money(r["decision_utility"])}
 Cash-back benchmark: {money(base)}
-Estimated modeled advantage: {money(adv)}
+Economic advantage vs benchmark: {money(adv)}
+Complexity friction: {money(r["complexity_penalty"])}
+Switching friction: {money(r["switching_penalty"])}
+Robustness score: {score:.0f}% across {len(rdf)} deterministic stress scenarios
 Issuer-data review date: {VERIFIED}
 
-Educational/research model; not individualized financial advice.
+CardOpt is an educational/research decision model, not individualized financial advice.
 """
-        st.download_button("Download analysis summary",summary,file_name="cardopt_summary.txt")
+        st.download_button("Download decision-analysis summary",summary,file_name="cardopt_decision_analysis.txt")
         st.download_button("Download allocation CSV",df.to_csv(index=False),file_name="cardopt_allocation.csv")
 
 st.caption("CardOpt is an educational and research prototype, not individualized financial advice. Card terms change; verify current issuer terms before acting.")
