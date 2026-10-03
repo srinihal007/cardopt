@@ -1,0 +1,56 @@
+{
+  "reviewed": "2026-09-20",
+  "cards": [
+    {
+      "name": "Chase Sapphire Reserve",
+      "url": "https://creditcards.chase.com/rewards-credit-cards/sapphire/reserve",
+      "expected_any": [
+        "795",
+        "8x",
+        "4x"
+      ]
+    },
+    {
+      "name": "American Express Gold",
+      "url": "https://www.americanexpress.com/us/credit-cards/card/gold-card/",
+      "expected_any": [
+        "325",
+        "4x",
+        "4X"
+      ]
+    },
+    {
+      "name": "Capital One Venture X",
+      "url": "https://www.capitalone.com/credit-cards/venture-x/",
+      "expected_any": [
+        "395",
+        "10x",
+        "10X"
+      ]
+    },
+    {
+      "name": "Citi Double Cash",
+      "url": "https://www.citi.com/credit-cards/citi-double-cash-credit-card",
+      "expected_any": [
+        "2%",
+        "5%"
+      ]
+    },
+    {
+      "name": "Chase Freedom Unlimited",
+      "url": "https://creditcards.chase.com/cash-back-credit-cards/freedom/unlimited",
+      "expected_any": [
+        "1.5%",
+        "3%",
+        "5%"
+      ]
+    },
+    {
+      "name": "Wells Fargo Active Cash",
+      "url": "https://www.wellsfargo.com/credit-cards/active-cash/",
+      "expected_any": [
+        "2%"
+      ]
+    }
+  ]
+}
